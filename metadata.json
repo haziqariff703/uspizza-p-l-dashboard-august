@@ -1,0 +1,7 @@
+{
+  "name": "US Pizza Task & Operations Tracker",
+  "description": "Real-time task management and progress tracking system for US Pizza corporate outlets, sales reconciliation, and platform audit operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
