@@ -5,7 +5,7 @@ import { CommissionFeesSection } from './CommissionFeesSection';
 import { DataCoverageSection } from './DataCoverageSection';
 import { SalesByOutletSection } from './SalesByOutletSection';
 import { PurchasesByOutletSection } from './PurchasesByOutletSection';
-import { GrossSalesByOutletSection } from './GrossSalesByOutletSection';
+import { PurchasesToNetSalesSection } from './PurchasesToNetSalesSection';
 import { PLByOutletSection } from './PLByOutletSection';
 import { ChannelFilter, DashboardSection, OutletFinancialData } from '../../types';
 import { copy } from '../../copy';
@@ -93,11 +93,15 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
       )}
       {section === 'fees' && <CommissionFeesSection channelFilter={channelFilter} />}
       {section === 'coverage' && <DataCoverageSection outlets={outlets} onGoToTasks={onGoToTasks} />}
-      {section === 'salesByOutlet' && <SalesByOutletSection outlets={outlets} />}
-      {section === 'purchasesByOutlet' && <PurchasesByOutletSection />}
-      {section === 'grossSalesByOutlet' && <GrossSalesByOutletSection />}
+      {section === 'salesByOutlet' && <SalesByOutletSection entityFilter={entityFilter} />}
+      {section === 'purchasesByOutlet' && <PurchasesByOutletSection entityFilter={entityFilter} />}
+      {section === 'purchasesToNetSales' && <PurchasesToNetSalesSection entityFilter={entityFilter} />}
       {section === 'plByOutlet' && (
-        <PLByOutletSection selectedCode={selectedOutletCode} onSelectOutlet={onSelectOutlet} />
+        <PLByOutletSection
+          selectedCode={selectedOutletCode}
+          onSelectOutlet={onSelectOutlet}
+          entityFilter={entityFilter}
+        />
       )}
     </div>
   );

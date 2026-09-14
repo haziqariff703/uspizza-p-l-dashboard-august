@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { ENTITY_TOTALS, PL_BY_OUTLET, PLATFORM_DETAIL_BY_OUTLET } from '../../data/outletData';
+import { PL_BY_OUTLET, PLATFORM_DETAIL_BY_OUTLET } from '../../data/outletData';
 import { PLATFORM_BRAND as PLATFORM_COLORS } from '../../platformColors';
 
 const money = (value: number) => `RM ${Math.abs(value).toLocaleString()}`;
@@ -10,21 +10,37 @@ interface PLByOutletSectionProps {
   /** Outlet code to open on mount / when the navbar search jumps here. */
   selectedCode?: string | null;
   onSelectOutlet?: (code: string) => void;
+  entityFilter: 'all' | 'myUsPizza' | 'sabah';
 }
 
-export const PLByOutletSection: React.FC<PLByOutletSectionProps> = ({ selectedCode, onSelectOutlet }) => {
-  const sortedByProfit = useMemo(() => [...PL_BY_OUTLET].sort((a, b) => b.grossProfit - a.grossProfit), []);
-  const byCode = useMemo(() => new Map(PL_BY_OUTLET.map((o) => [o.code, o])), []);
-  const byName = useMemo(() => [...PL_BY_OUTLET].sort((a, b) => a.name.localeCompare(b.name)), []);
+export const PLByOutletSection: React.FC<PLByOutletSectionProps> = ({ selectedCode, onSelectOutlet, entityFilter }) => {
+  const scopedOutlets = useMemo(
+    () =>
+      PL_BY_OUTLET.filter((outlet) =>
+        entityFilter === 'all' ? true : entityFilter === 'sabah' ? outlet.entity === 'Sabah' : outlet.entity === 'MY US PIZZA'
+      ),
+    [entityFilter]
+  );
+  const sortedByProfit = useMemo(() => [...scopedOutlets].sort((a, b) => b.grossProfit - a.grossProfit), [scopedOutlets]);
+  const byCode = useMemo(() => new Map(scopedOutlets.map((o) => [o.code, o])), [scopedOutlets]);
+  const byName = useMemo(() => [...scopedOutlets].sort((a, b) => a.name.localeCompare(b.name)), [scopedOutlets]);
+  const scopeTotals = useMemo(() => {
+    const netSales = scopedOutlets.reduce((sum, outlet) => sum + outlet.netSales, 0);
+    const purchases = scopedOutlets.reduce((sum, outlet) => sum + outlet.purchases, 0);
+    const grossProfit = scopedOutlets.reduce((sum, outlet) => sum + outlet.grossProfit, 0);
+    return { netSales, purchases, grossProfit, grossMargin: (grossProfit / netSales) * 100 };
+  }, [scopedOutlets]);
 
   const [localCode, setLocalCode] = useState<string>(selectedCode || 'MY-030');
 
   // Follow an external jump (e.g. navbar search) without fighting local selection.
   useEffect(() => {
-    if (selectedCode) setLocalCode(selectedCode);
-  }, [selectedCode]);
+    if (selectedCode && byCode.has(selectedCode)) setLocalCode(selectedCode);
+    else if (!byCode.has(localCode) && scopedOutlets[0]) setLocalCode(scopedOutlets[0].code);
+  }, [byCode, localCode, scopedOutlets, selectedCode]);
 
-  const outlet = byCode.get(localCode) || PL_BY_OUTLET[0];
+  const outlet = byCode.get(localCode) || scopedOutlets[0];
+  if (!outlet) return null;
   const platforms = PLATFORM_DETAIL_BY_OUTLET[outlet.name];
   const maxPlatform = platforms ? Math.max(...Object.values(platforms)) : 0;
 
@@ -70,7 +86,7 @@ export const PLByOutletSection: React.FC<PLByOutletSectionProps> = ({ selectedCo
                 {(Object.entries(platforms) as [string, number][]).map(([platform, value]) => (
                   <div key={platform} className="flex items-center gap-3">
                     <span className="flex w-20 shrink-0 items-center gap-1.5 text-sm text-slate-600">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: PLATFORM_COLORS[platform] }} />
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: PLATFORM_COLORS[platform] }} />
                       {platform}
                     </span>
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
@@ -127,19 +143,19 @@ export const PLByOutletSection: React.FC<PLByOutletSectionProps> = ({ selectedCo
           </select>
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Selected scope · combined</div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Outlets · combined</div>
             <div className="flex justify-between py-1">
               <span className="text-slate-600">Net Sales</span>
-              <span className="font-semibold tabular-nums text-slate-900">{money(ENTITY_TOTALS.all.netSales)}</span>
+              <span className="font-semibold tabular-nums text-slate-900">{money(scopeTotals.netSales)}</span>
             </div>
             <div className="flex justify-between py-1 text-slate-500">
               <span>Purchases</span>
-              <span className="tabular-nums">− {money(ENTITY_TOTALS.all.purchases)}</span>
+              <span className="tabular-nums">− {money(scopeTotals.purchases)}</span>
             </div>
             <div className="flex justify-between border-t border-slate-200 pt-2">
               <span className="font-bold text-slate-900">Gross Profit</span>
               <span className="font-bold tabular-nums text-emerald-600">
-                {money(ENTITY_TOTALS.all.grossProfit)} · {ENTITY_TOTALS.all.grossMargin}%
+                {money(scopeTotals.grossProfit)} · {scopeTotals.grossMargin.toFixed(1)}%
               </span>
             </div>
           </div>
@@ -182,11 +198,11 @@ export const PLByOutletSection: React.FC<PLByOutletSectionProps> = ({ selectedCo
           <tfoot>
             <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
               <td className="px-3 py-2.5" />
-              <td className="px-3 py-2.5 text-slate-900">Total · {PL_BY_OUTLET.length} outlets</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{money(ENTITY_TOTALS.all.netSales)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{money(ENTITY_TOTALS.all.purchases)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{money(ENTITY_TOTALS.all.grossProfit)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600">{ENTITY_TOTALS.all.grossMargin}%</td>
+              <td className="px-3 py-2.5 text-slate-900">Total · {scopedOutlets.length} outlets</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{money(scopeTotals.netSales)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{money(scopeTotals.purchases)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{money(scopeTotals.grossProfit)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600">{scopeTotals.grossMargin.toFixed(1)}%</td>
             </tr>
           </tfoot>
         </table>

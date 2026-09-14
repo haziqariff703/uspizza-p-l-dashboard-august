@@ -179,7 +179,7 @@ export const INITIAL_OUTLETS: OutletFinancialData[] = [
     id: 'MY-044',
     code: 'MY-044',
     name: 'Vivacity Kuching',
-    entity: 'Sabah',
+    entity: 'MY US PIZZA',
     status: 'active',
     grossSales: 171400,
     discount: 26149,
@@ -948,9 +948,7 @@ export const INITIAL_ACTIVITIES: ActivityEvent[] = [
  * profit descending as in that capture's own default sort.
  *
  * Entity split (Bundusan + Inanam = Sabah, everyone else MY US PIZZA) follows
- * that capture exactly. Note this differs from INITIAL_OUTLETS above, whose
- * smaller 21-outlet set instead tags Vivacity Kuching as the Sabah entity —
- * the two datasets predate each other and haven't been reconciled.
+ * that capture exactly. INITIAL_OUTLETS uses the same entity classification.
  */
 export const PL_BY_OUTLET: PLOutletRow[] = [
   { name: 'Vivacity Kuching', code: 'MY-076', entity: 'MY US PIZZA', netSales: 145251, purchases: 27394, grossProfit: 117858, marginPct: 81.1 },
