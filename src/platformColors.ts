@@ -6,17 +6,17 @@ export const PLATFORM_BRAND: Record<string, string> = {
   Grab: '#00B14F',
   FoodPanda: '#D70F64',
   Shopee: '#EE4D2D',
-  Apps: '#6366F1',
+  Apps: '#C8102E',
   POS: '#64748B',
 };
 
 /** Fee-type colors used by the commission composition bars (section 2). */
 export const FEE_TYPE_COLORS = {
-  commission: '#0F172A',
-  advertising: '#7C3AED',
-  platformFees: '#0EA5E9',
-  paymentGateway: '#0D9488',
-  adjustments: '#94A3B8',
+  commission: '#C8102E',
+  advertising: '#D97706',
+  platformFees: '#0F172A',
+  paymentGateway: '#64748B',
+  adjustments: '#CBD5E1',
 } as const;
 
 /** Sales-basis accents used by the overview metric cards (section 1). */

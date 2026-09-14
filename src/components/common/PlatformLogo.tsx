@@ -11,11 +11,8 @@ interface PlatformLogoProps {
   showLabel?: boolean;
 }
 
-/**
- * Brand tiles rendered as rounded (rx=5 equivalent) brand-hex squares.
- * Grab / FoodPanda / Shopee use official Simple Icons marks; Apps & Web use the
- * US Pizza emblem at xs; POS / GRN keep their custom glyphs.
- */
+/** Quiet brand marks: official colour is reserved for the glyph, while the
+ * container stays on the dashboard's global white/slate surface system. */
 export const PlatformLogo: React.FC<PlatformLogoProps> = ({
   platform,
   className = '',
@@ -31,20 +28,18 @@ export const PlatformLogo: React.FC<PlatformLogoProps> = ({
 
   const sz = sizeClasses[size];
   const glyphPad = {
-    xs: 'p-[2px]',
-    sm: 'p-[2.5px]',
-    md: 'p-[3px]',
-    lg: 'p-[3.5px]',
+    xs: 'p-[1px]',
+    sm: 'p-[1.5px]',
+    md: 'p-0.5',
+    lg: 'p-0.5',
   };
 
-  const Tile: React.FC<{ bg: string; label: string; children: React.ReactNode }> = ({
-    bg,
+  const Mark: React.FC<{ label: string; children: React.ReactNode }> = ({
     label,
     children,
   }) => (
     <span
-      className={`${sz} ${glyphPad} inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[5px]`}
-      style={{ backgroundColor: bg }}
+      className={`${sz} ${glyphPad} inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white`}
       title={label}
       role="img"
       aria-label={label}
@@ -57,64 +52,58 @@ export const PlatformLogo: React.FC<PlatformLogoProps> = ({
     switch (platform) {
       case 'Grab':
         return (
-          <Tile bg="#00B14F" label="Grab">
-            <SiGrab size="100%" color="#FFFFFF" aria-hidden="true" />
-          </Tile>
+          <Mark label="Grab"><SiGrab size="100%" color="#00B14F" aria-hidden="true" /></Mark>
         );
 
       case 'FoodPanda':
         return (
-          <Tile bg="#D70F64" label="FoodPanda">
-            <SiFoodpanda size="100%" color="#FFFFFF" aria-hidden="true" />
-          </Tile>
+          <Mark label="FoodPanda"><SiFoodpanda size="100%" color="#D70F64" aria-hidden="true" /></Mark>
         );
 
       case 'Shopee':
         return (
-          <Tile bg="#EE4D2D" label="Shopee">
-            <SiShopee size="100%" color="#FFFFFF" aria-hidden="true" />
-          </Tile>
+          <Mark label="Shopee"><SiShopee size="100%" color="#EE4D2D" aria-hidden="true" /></Mark>
         );
 
       case 'Apps':
       case 'Web':
         return (
-          <Tile bg="#C8102E" label="US Pizza App">
+          <Mark label="US Pizza App">
             <UsPizzaLogo size="sm" variant="mark" className="[&>svg]:h-full [&>svg]:w-full" />
-          </Tile>
+          </Mark>
         );
 
       case 'POS':
         return (
-          <Tile bg="#334155" label="POS">
+          <Mark label="POS">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full" aria-hidden="true">
-              <rect x="4" y="3.5" width="16" height="9.5" rx="1.2" fill="white" />
+              <rect x="4" y="3.5" width="16" height="9.5" rx="1.2" stroke="#334155" strokeWidth="1.4" />
               <line x1="6.5" y1="6.5" x2="17.5" y2="6.5" stroke="#334155" strokeWidth="1.4" strokeLinecap="round" />
               <line x1="6.5" y1="9.5" x2="13.5" y2="9.5" stroke="#334155" strokeWidth="1.4" strokeLinecap="round" />
-              <rect x="4.5" y="15" width="15" height="4" rx="0.6" fill="white" fillOpacity="0.85" />
+              <rect x="4.5" y="15" width="15" height="4" rx="0.6" stroke="#334155" strokeWidth="1.2" />
               <circle cx="7" cy="17" r="0.7" fill="#334155" />
               <circle cx="10" cy="17" r="0.7" fill="#334155" />
               <circle cx="13" cy="17" r="0.7" fill="#334155" />
             </svg>
-          </Tile>
+          </Mark>
         );
 
       case 'GRN':
         return (
-          <Tile bg="#0284C7" label="GRN">
+          <Mark label="GRN">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full" aria-hidden="true">
-              <path d="M4 5H20M4 10H20M4 15H14" stroke="white" strokeWidth="2.4" strokeLinecap="round" />
+              <path d="M4 5H20M4 10H20M4 15H14" stroke="#C8102E" strokeWidth="2.2" strokeLinecap="round" />
             </svg>
-          </Tile>
+          </Mark>
         );
 
       default:
         return (
-          <Tile bg="#64748B" label={typeof platform === 'string' ? platform : 'Channel'}>
+          <Mark label={typeof platform === 'string' ? platform : 'Channel'}>
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full" aria-hidden="true">
-              <circle cx="12" cy="12" r="4" fill="white" />
+              <circle cx="12" cy="12" r="4" fill="#64748B" />
             </svg>
-          </Tile>
+          </Mark>
         );
     }
   };

@@ -1,426 +1,141 @@
-import React, { useState } from 'react';
-import {
-  WarningTriangle as AlertTriangle,
-  Send as SendHorizontal,
-  CheckCircle as CheckCircle2,
-  Xmark as X
-} from 'iconoir-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { CheckCircle, NavArrowRight, Send, WarningTriangle, Xmark } from 'iconoir-react';
 import { COMMISSION_FEES_SUMMARY, PLATFORM_SETTLEMENTS } from '../../data/outletData';
-import { SectionHeading } from './SectionHeading';
 import { ChannelFilter } from '../../types';
-import { PlatformLogo } from '../common/PlatformLogo';
+import { FEE_TYPE_COLORS } from '../../platformColors';
 import { copy } from '../../copy';
-import { FEE_TYPE_COLORS, PLATFORM_BRAND } from '../../platformColors';
+import { PlatformLogo } from '../common/PlatformLogo';
+import { SectionHeading } from './SectionHeading';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '../ui/table';
 
-interface CommissionFeesSectionProps {
-  channelFilter: ChannelFilter;
-}
-
-const FEE_COMPOSITION: { key: 'commission' | 'advertising' | 'platformFees' | 'paymentGateway' | 'adjustments'; label: string }[] = [
-  { key: 'commission', label: 'Commission' },
-  { key: 'advertising', label: 'Advertising' },
-  { key: 'platformFees', label: 'Platform / service fees' },
-  { key: 'paymentGateway', label: 'Payment gateway' },
-  { key: 'adjustments', label: 'Adjustments / credits' },
-];
-
-const money = (n: number) => `RM ${Math.abs(n).toLocaleString()}`;
-
-const FEE_PLATFORMS = ['Grab', 'FoodPanda', 'Shopee', 'Apps'] as const;
-
-const FEE_ROWS: { key: keyof (typeof COMMISSION_FEES_SUMMARY)['platforms']['Grab']; label: string }[] = [
-  { key: 'commission', label: 'Commission' },
-  { key: 'advertising', label: 'Advertising' },
-  { key: 'platformFees', label: 'Platform / Service fees' },
-  { key: 'paymentGateway', label: 'Payment gateway' },
-  { key: 'adjustments', label: 'Adjustments / Credits' },
-];
+interface CommissionFeesSectionProps { channelFilter: ChannelFilter; }
+const PLATFORMS = ['Grab', 'FoodPanda', 'Shopee', 'Apps'] as const;
+const FEE_ROWS = [{ key: 'commission', label: 'Commission' }, { key: 'advertising', label: 'Advertising' }, { key: 'platformFees', label: 'Platform / service fees' }, { key: 'paymentGateway', label: 'Payment gateway' }, { key: 'adjustments', label: 'Adjustments / credits' }] as const;
+type FeePlatform = (typeof PLATFORMS)[number];
+type FeeKey = (typeof FEE_ROWS)[number]['key'];
+const money = (n: number) => `RM ${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
 export const CommissionFeesSection: React.FC<CommissionFeesSectionProps> = ({ channelFilter }) => {
-  const { platforms, advertisingSpend, advertisingBreakdown, commissionMonth, totalFeesMonth } =
-    COMMISSION_FEES_SUMMARY;
-
-  const [isLarkModalOpen, setIsLarkModalOpen] = useState(false);
-  const [larkNote, setLarkNote] = useState('Reconciliation difference RM 158,143 identified between May fee reports and bank settlements. Awaiting platform transaction-level breakdown.');
-  const [assignedOwner, setAssignedOwner] = useState('Finance Team (fiqsss45)');
-  const [larkSuccessToast, setLarkSuccessToast] = useState(false);
-
-  // Both headline percentages exclude POS, which carries no platform fees.
+  const { platforms, advertisingSpend, advertisingBreakdown, commissionMonth, totalFeesMonth } = COMMISSION_FEES_SUMMARY;
+  const [active, setActive] = useState<FeePlatform | 'All'>('All');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [sent, setSent] = useState(false);
   const nonPos = PLATFORM_SETTLEMENTS.filter((p) => p.platform !== 'POS');
-  const nonPosGross = nonPos.reduce((sum, p) => sum + p.grossSales, 0);
-  const nonPosNet = nonPos.reduce((sum, p) => sum + p.grossSales - p.discount, 0);
-  const feesOfGrossPct = ((totalFeesMonth / nonPosGross) * 100).toFixed(1);
-  const commissionOfNetPct = ((commissionMonth / nonPosNet) * 100).toFixed(1);
+  const gross = nonPos.reduce((sum, p) => sum + p.grossSales, 0);
+  const net = nonPos.reduce((sum, p) => sum + p.grossSales - p.discount, 0);
+  const deducted = PLATFORM_SETTLEMENTS.reduce((sum, p) => sum + p.commissionFees, 0);
+  const gap = totalFeesMonth - deducted;
+  const selected = channelFilter !== 'All' && PLATFORMS.includes(channelFilter as FeePlatform) ? channelFilter as FeePlatform : active;
+  const visible = selected === 'All' ? PLATFORMS : [selected];
+  useEffect(() => {
+    setActive(channelFilter !== 'All' && PLATFORMS.includes(channelFilter as FeePlatform) ? channelFilter as FeePlatform : 'All');
+  }, [channelFilter]);
 
-  // Two sources describe "platform costs" differently
-  const settlementDeducted = PLATFORM_SETTLEMENTS.reduce((sum, p) => sum + p.commissionFees, 0);
-  const reconciliationGap = totalFeesMonth - settlementDeducted;
+  const chartData = useMemo(() => PLATFORMS
+    .filter((platform) => selected === 'All' || platform === selected)
+    .map((platform) => ({ platform, total: platforms[platform].totalFees }))
+    .sort((a, b) => b.total - a.total), [platforms, selected]);
 
-  const visiblePlatforms = FEE_PLATFORMS.filter((p) => channelFilter === 'All' || p === channelFilter);
-  const showTotalColumn = channelFilter === 'All';
+  return <section className="space-y-5">
+    <SectionHeading number={2} title="Commission & Platform Fees" subtitle="May 2026 · platform cost, settlement impact, and reconciliation status" />
+    {sent && <div role="status" className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900"><span className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-[#C8102E]" aria-hidden="true" />Review request sent to Finance Team (fiqsss45).</span><Button variant="outline" className="min-h-8 px-2.5 py-1 text-[11px]" onClick={() => setSent(false)}>Dismiss</Button></div>}
 
-  const handleSendLarkAlert = () => {
-    setIsLarkModalOpen(false);
-    setLarkSuccessToast(true);
-    setTimeout(() => setLarkSuccessToast(false), 4000);
-  };
+    <div className="grid gap-3 sm:grid-cols-3">
+      <MetricCard label="Total platform costs" value={money(totalFeesMonth)} detail={`${((totalFeesMonth / gross) * 100).toFixed(1)}% of non-POS gross`} tone="primary" />
+      <MetricCard label="Commission" value={money(commissionMonth)} detail={`${((commissionMonth / net) * 100).toFixed(1)}% of non-POS net`} tone="brand" />
+      <MetricCard label="Advertising spend" value={money(advertisingSpend)} detail={advertisingBreakdown} tone="neutral" />
+    </div>
+
+    <Card>
+      <CardHeader><div><CardTitle>Platform cost comparison</CardTitle><CardDescription>Ranked total fees from the May platform statements.</CardDescription></div></CardHeader>
+      <CardContent>
+        <div className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Platform filter"><Button className="shrink-0" variant={selected === 'All' ? 'default' : 'outline'} aria-pressed={selected === 'All'} onClick={() => setActive('All')}>All platforms</Button>{PLATFORMS.map((p) => <Button className="shrink-0" key={p} variant={selected === p ? 'default' : 'outline'} aria-pressed={selected === p} onClick={() => setActive(p)}><PlatformLogo platform={p} size="xs" />{p}</Button>)}</div>
+        <FeeChart data={chartData} />
+      </CardContent>
+    </Card>
+
+    <div>
+      <div className="mb-3"><h3 className="text-sm font-bold text-slate-900">Platform breakdown</h3><p className="mt-0.5 text-xs text-slate-500">How each platform’s total is distributed across fee categories.</p></div>
+      <div className="grid gap-3 lg:grid-cols-2">{visible.map((p) => <PlatformSummary key={p} platform={p} fees={platforms[p]} />)}</div>
+    </div>
+
+    <Card className="border-amber-200 bg-[#FFF8E8]"><CardContent className="flex flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex gap-3"><div className="mt-0.5 rounded-lg bg-amber-100 p-2 text-amber-800"><WarningTriangle className="h-5 w-5" aria-hidden="true" /></div><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-amber-950">Reconciliation needs review</h3><Badge variant="warning">Open difference</Badge></div><p className="mt-1 max-w-2xl text-sm leading-5 text-amber-900">{copy.feesGapIntro} {copy.feesUnexplained} <strong>{money(gap)}</strong>. {copy.feesGapOutro}</p></div></div><Button onClick={() => setDialogOpen(true)}><Send className="h-4 w-4" aria-hidden="true" />Assign review</Button></CardContent><div className="grid border-t border-amber-200 sm:grid-cols-3"><Recon label={copy.feesReportTotalLabel} value={money(totalFeesMonth)} /><Recon label={copy.feesDeductedLabel} value={money(deducted)} /><Recon label={copy.feesDifferenceLabel} value={money(gap)} emphasis /></div></Card>
+
+    <Card><CardHeader><div><CardTitle>Detailed fee itemisation</CardTitle><CardDescription>{copy.feesTableSubtitle}</CardDescription></div><Badge variant="outline">MYR · May 2026</Badge></CardHeader><CardContent className="pt-2"><FeeTable platforms={visible} data={platforms} /></CardContent></Card>
+    <p className="text-xs leading-5 text-slate-500">{copy.feesFootnote}</p>
+    {dialogOpen && <ReviewDialog gap={gap} onClose={() => setDialogOpen(false)} onSend={() => { setDialogOpen(false); setSent(true); }} />}
+  </section>;
+};
+
+function MetricCard({ label, value, detail, tone, className = '' }: { label: string; value: string; detail: string; tone: 'primary' | 'brand' | 'neutral'; className?: string }) { const tones = { primary: 'border-[#E6D2B5] border-t-4 border-t-[#C8102E] bg-[#FFF8EE]', brand: 'border-slate-200 border-t-4 border-t-[#C8102E] bg-white', neutral: 'border-slate-200 border-t-4 border-t-[#D4A03A] bg-white' }; return <Card className={`${tones[tone]} ${className}`}><CardContent className="py-4"><p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">{label}</p><p className={`mt-2 font-black leading-none tracking-tight tabular-nums ${tone === 'primary' ? 'text-[clamp(1.65rem,3vw,2rem)] text-[#C8102E]' : 'text-[clamp(1.35rem,2.5vw,1.75rem)] text-slate-900'}`}>{value}</p><p className="mt-2 text-xs leading-4 text-slate-600">{detail}</p></CardContent></Card>; }
+function Recon({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) { return <div className={`px-5 py-3 ${emphasis ? 'bg-amber-100/70' : ''}`}><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">{label}</p><p className={`mt-1 text-lg font-black tabular-nums ${emphasis ? 'text-amber-950' : 'text-slate-900'}`}>{value}</p></div>; }
+function FeeChart({ data }: { data: Record<string, string | number>[] }) {
+  return <div><div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><p className="text-xs font-medium text-slate-500">Total monthly platform costs (RM)</p><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Highest to lowest</p></div><div className={data.length > 1 ? 'h-[240px]' : 'h-[120px]'} role="img" aria-label="Horizontal bar chart ranking monthly platform costs from highest to lowest"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} layout="vertical" margin={{ top: 4, right: 58, left: 6, bottom: 4 }}><CartesianGrid horizontal={false} stroke="#e2e8f0" /><XAxis type="number" tickFormatter={(v: number) => `RM ${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} /><YAxis type="category" dataKey="platform" width={76} tick={{ fontSize: 12, fontWeight: 700, fill: '#334155' }} tickLine={false} axisLine={false} /><Tooltip formatter={(v: number) => money(v)} cursor={{ fill: '#f8fafc' }} /><Bar dataKey="total" name="Platform costs" fill="#C8102E" radius={[0, 5, 5, 0]} isAnimationActive={false}><LabelList dataKey="total" position="right" formatter={(v: number) => `${(v / 1000).toFixed(1)}k`} fill="#334155" fontSize={11} fontWeight={700} /></Bar></BarChart></ResponsiveContainer></div></div>;
+}
+function FeeTable({ platforms, data }: { platforms: readonly FeePlatform[]; data: typeof COMMISSION_FEES_SUMMARY.platforms }) {
+  const showTotal = platforms.length > 1;
+  return (
+    <Table className="min-w-[620px]">
+      <TableHeader><TableRow className="hover:bg-transparent"><TableHead>Fee item</TableHead>{platforms.map((platform) => <TableHead className="text-right" key={platform}>{platform}</TableHead>)}{showTotal && <TableHead className="text-right">Total</TableHead>}</TableRow></TableHeader>
+      <TableBody>{FEE_ROWS.map((row) => {
+        const totalValue = Number(data.Total[row.key]);
+        return <TableRow key={row.key}><TableCell className="font-semibold text-slate-800">{row.label}</TableCell>{platforms.map((platform) => { const value = Number(data[platform][row.key]); return <TableCell key={platform} className={`text-right tabular-nums ${value < 0 ? 'font-bold text-slate-950' : 'text-slate-700'}`}>{value === 0 ? '—' : `${value < 0 ? '− ' : ''}${money(value)}`}</TableCell>; })}{showTotal && <TableCell className="text-right font-bold tabular-nums text-slate-900">{totalValue < 0 ? '− ' : ''}{money(totalValue)}</TableCell>}</TableRow>;
+      })}</TableBody>
+      <TableFooter><TableRow className="hover:bg-transparent"><TableCell>Total platform costs</TableCell>{platforms.map((platform) => <TableCell key={platform} className="text-right tabular-nums">{money(data[platform].totalFees)}</TableCell>)}{showTotal && <TableCell className="text-right tabular-nums text-amber-800">{money(data.Total.totalFees)}</TableCell>}</TableRow></TableFooter>
+    </Table>
+  );
+}
+const PlatformSummary: React.FC<{ platform: FeePlatform; fees: typeof COMMISSION_FEES_SUMMARY.platforms.Grab }> = ({ platform, fees }) => { const portions = FEE_ROWS.map((row) => ({ ...row, value: Math.abs(Number(fees[row.key])) })).filter((item) => item.value > 0); const total = portions.reduce((sum, item) => sum + item.value, 0); return <Card><CardContent className="py-4"><div className="flex items-center justify-between"><div className="flex items-center gap-2 font-bold text-slate-900"><PlatformLogo platform={platform} size="sm" />{platform}</div><Badge variant="outline">{money(fees.totalFees)} fees</Badge></div><div className="mt-4 flex h-3 overflow-hidden rounded-full bg-slate-100">{portions.map((item) => <div key={item.key} style={{ width: `${(item.value / total) * 100}%`, background: FEE_TYPE_COLORS[item.key as FeeKey] }} title={`${item.label}: ${money(item.value)}`} />)}</div><div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5">{portions.map((item) => <span className="flex items-center gap-1 text-[11px] text-slate-600" key={item.key}><span className="h-2 w-2 rounded-sm" style={{ background: FEE_TYPE_COLORS[item.key as FeeKey] }} aria-hidden="true" />{item.label} {Math.round((item.value / total) * 100)}%</span>)}</div></CardContent></Card>; };
+function ReviewDialog({ gap, onClose, onSend }: { gap: number; onClose: () => void; onSend: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [onClose]);
 
   return (
-    <div className="space-y-5">
-      <SectionHeading
-        number={2}
-        title="Commission & Platform Fees"
-        subtitle={`${money(totalFeesMonth)} total platform costs for May 2026 · with reconciliation gap`}
-      />
-
-      {/* Success Toast */}
-      {larkSuccessToast && (
-        <div className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-900 shadow-sm animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            <span>Lark Webhook Dispatched: Notification sent to #{assignedOwner} with audit link and notes.</span>
-          </div>
-          <button
-            onClick={() => setLarkSuccessToast(false)}
-            aria-label="Dismiss notification"
-            title="Dismiss"
-            className="text-emerald-700 hover:text-emerald-900"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* Top Metric Cards - Clean Swiss style (No generic purple) */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {/* Advertising Card */}
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-end">
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-              Grab &amp; FoodPanda Ads
-            </span>
-          </div>
-          <p className="mt-3 text-xs font-bold uppercase tracking-wider text-slate-500">Advertising Spend</p>
-          <p className="mt-1 text-2xl font-black tabular-nums tracking-tight text-slate-900">{money(advertisingSpend)}</p>
-          <p className="mt-1 text-xs text-slate-500">{advertisingBreakdown}</p>
-        </article>
-
-        {/* Commission Card */}
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-end">
-            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-[#C8102E] border border-rose-200">
-              Effective Rate: {commissionOfNetPct}%
-            </span>
-          </div>
-          <p className="mt-3 text-xs font-bold uppercase tracking-wider text-slate-500">Commission / Month</p>
-          <p className="mt-1 text-2xl font-black tabular-nums tracking-tight text-slate-900">{money(commissionMonth)}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            <strong className="text-slate-700">{commissionOfNetPct}%</strong> of non-POS net sales ({money(nonPosNet)}), including Apps
-          </p>
-        </article>
-
-        {/* Total Fees Card */}
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-end">
-            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
-              {feesOfGrossPct}% of Gross
-            </span>
-          </div>
-          <p className="mt-3 text-xs font-bold uppercase tracking-wider text-slate-500">Total Platform Fees</p>
-          <p className="mt-1 text-2xl font-black tabular-nums tracking-tight text-amber-700">{money(totalFeesMonth)}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            <strong className="text-slate-700">{feesOfGrossPct}%</strong> of non-POS gross sales ({money(nonPosGross)})
-          </p>
-        </article>
-      </div>
-
-      {/* Fees vs Settlement: Active Reconciliation Gap Banner with Lark Trigger */}
-      <article className="rounded-xl border border-amber-300 bg-amber-50/70 p-5 shadow-xs">
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-800">
-              <AlertTriangle className="h-5 w-5 text-amber-700" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-amber-950">
-                  Platform Fee Report vs. Settlement Deductions Gap
-                </h3>
-                <span className="rounded-md bg-amber-200/80 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">
-                  Requires Review
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-amber-900/90 leading-relaxed max-w-3xl">
-                {copy.feesGapIntro} {copy.feesUnexplained} <strong className="tabular-nums font-black text-amber-950">{money(reconciliationGap)}</strong>. {copy.feesGapOutro}
-              </p>
-
-              <dl className="mt-3.5 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                <div className="rounded-lg border border-amber-200 bg-white p-2.5">
-                  <dt className="text-[11px] font-medium text-slate-500">{copy.feesReportTotalLabel}</dt>
-                  <dd className="mt-0.5 font-bold tabular-nums text-slate-900">{money(totalFeesMonth)}</dd>
-                </div>
-                <div className="rounded-lg border border-amber-200 bg-white p-2.5">
-                  <dt className="text-[11px] font-medium text-slate-500">{copy.feesDeductedLabel}</dt>
-                  <dd className="mt-0.5 font-bold tabular-nums text-slate-900">{money(settlementDeducted)}</dd>
-                </div>
-                <div className="rounded-lg border border-amber-300 bg-amber-100/50 p-2.5">
-                  <dt className="text-[11px] font-bold text-amber-900">{copy.feesDifferenceLabel}</dt>
-                  <dd className="mt-0.5 font-black tabular-nums text-amber-900">{money(reconciliationGap)}</dd>
-                </div>
-              </dl>
-            </div>
-          </div>
-
-          {/* Action Button: Lark Review & Follow-up */}
-          <div className="flex sm:flex-col shrink-0 gap-2 items-end justify-end">
-            <button
-              id="open-lark-review-btn"
-              type="button"
-              onClick={() => setIsLarkModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-[#0284C7] hover:bg-[#0369A1] active:bg-[#075985] text-white px-3.5 py-2 text-xs font-bold transition-all shadow-xs"
-            >
-              <SendHorizontal className="h-3.5 w-3.5" />
-              <span>Assign Lark Review</span>
-            </button>
-            <span className="text-[10px] text-amber-800 font-medium hidden sm:block text-right">
-              Bot webhook alerts team
-            </span>
-          </div>
-        </div>
-      </article>
-
-      {/* Platform Fees Itemized Table */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
-        <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-3 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/50 p-4" role="presentation" onMouseDown={onClose}>
+      <div className="my-auto w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="review-dialog-title" aria-describedby="review-dialog-description" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              {copy.feesTableTitle}
-            </h4>
-            <p className="text-[11px] text-slate-500">
-              {copy.feesTableSubtitle}
-            </p>
+            <Badge variant="warning" className="mb-2">May exception</Badge>
+            <h3 id="review-dialog-title" className="text-lg font-bold tracking-tight text-slate-950">Assign reconciliation review</h3>
+            <p id="review-dialog-description" className="mt-1 text-sm leading-5 text-slate-600">Send the unresolved fee variance to the finance queue with its audit context.</p>
           </div>
-          <span className="text-[11px] font-bold text-slate-500">Currency: MYR (RM)</span>
+          <Button ref={closeButtonRef} variant="secondary" className="min-h-10 w-10 shrink-0 px-0" aria-label="Close review dialog" onClick={onClose}><Xmark className="h-4 w-4" aria-hidden="true" /></Button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-3 text-left">Fee Item</th>
-                {visiblePlatforms.map((platform) => (
-                  <th key={platform} className="px-4 py-3 text-right">
-                    <span className="inline-flex items-center justify-end gap-1.5">
-                      <PlatformLogo platform={platform} size="xs" />
-                      <span>{platform}</span>
-                    </span>
-                  </th>
-                ))}
-                {showTotalColumn && <th className="px-4 py-3 text-right text-slate-900 font-black">Consolidated Total</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {FEE_ROWS.map((row) => (
-                <React.Fragment key={row.key}>
-                  <tr className="hover:bg-slate-50/60 transition-colors">
-                    <td className="px-4 py-2.5 font-semibold text-slate-800">{row.label}</td>
-                    {visiblePlatforms.map((platform) => {
-                      const value = platforms[platform][row.key] as number;
-                      const isCredit = row.key === 'adjustments' && value < 0;
-                      return (
-                        <td
-                          key={platform}
-                          className={`px-4 py-2.5 text-right tabular-nums ${
-                            isCredit ? 'font-bold text-emerald-600' : 'text-slate-700 font-medium'
-                          }`}
-                        >
-                          {value === 0 ? '—' : `${isCredit ? '− ' : ''}${money(value)}`}
-                        </td>
-                      );
-                    })}
-                    {showTotalColumn && (
-                      <td
-                        className={`px-4 py-2.5 text-right font-bold tabular-nums ${
-                          row.key === 'adjustments' && (platforms.Total[row.key] as number) < 0
-                            ? 'text-emerald-600'
-                            : 'text-slate-900'
-                        }`}
-                      >
-                        {(platforms.Total[row.key] as number) < 0 ? '− ' : ''}
-                        {money(platforms.Total[row.key] as number)}
-                      </td>
-                    )}
-                  </tr>
-
-                  {/* Commission rate sub-row */}
-                  {row.key === 'commission' && (
-                    <tr className="text-[11px] italic bg-slate-50/40 text-slate-500">
-                      <td className="px-4 pb-2 pt-0.5 pl-7 text-slate-500">↳ Effective commission rate (% of net sales)</td>
-                      {visiblePlatforms.map((platform) => (
-                        <td key={platform} className="px-4 pb-2 pt-0.5 text-right tabular-nums font-semibold text-slate-600">
-                          {platforms[platform].rate}
-                        </td>
-                      ))}
-                      {showTotalColumn && (
-                        <td className="px-4 pb-2 pt-0.5 text-right tabular-nums font-bold text-slate-800">
-                          {platforms.Total.rate}
-                        </td>
-                      )}
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-slate-200 bg-slate-50 font-black text-slate-900">
-                <td className="px-4 py-3 uppercase text-xs tracking-wider">Total Platform Deductions</td>
-                {visiblePlatforms.map((platform) => (
-                  <td key={platform} className="px-4 py-3 text-right tabular-nums font-black">
-                    {money(platforms[platform].totalFees)}
-                  </td>
-                ))}
-                {showTotalColumn && (
-                  <td className="px-4 py-3 text-right tabular-nums font-black text-amber-700 text-sm">
-                    {money(platforms.Total.totalFees)}
-                  </td>
-                )}
-              </tr>
-            </tfoot>
-          </table>
+        <div className="mt-5 flex items-end justify-between rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div><p className="text-[11px] font-bold uppercase tracking-[0.12em] text-amber-800">Open difference</p><p className="mt-1 text-2xl font-black text-amber-950 tabular-nums">{money(gap)}</p></div>
+          <Badge variant="warning">Requires evidence</Badge>
         </div>
+
+        <div className="mt-5 space-y-4">
+          <label className="block text-sm font-semibold text-slate-800">Assign to
+            <select className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#C8102E]">
+              <option>Finance Team (fiqsss45)</option><option>Platform Reconciliation Team</option><option>Sabah Operations Team</option>
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-slate-800">Review note
+            <textarea className="mt-1.5 min-h-24 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#C8102E]" defaultValue="Reconcile the May fee report against bank settlements and attach the missing platform invoices." />
+          </label>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={onSend}>Send review <NavArrowRight className="h-4 w-4" aria-hidden="true" /></Button></div>
       </div>
-
-      {/* Fee composition per platform — what each platform's total is made of */}
-      <div>
-        <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-700">Fee composition per platform</h4>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {FEE_PLATFORMS.map((platform) => {
-            const fees = platforms[platform];
-            const segments = FEE_COMPOSITION.map((row) => ({
-              ...row,
-              value: Math.abs(fees[row.key] as number),
-            })).filter((seg) => seg.value > 0);
-            const segmentTotal = segments.reduce((sum, seg) => sum + seg.value, 0);
-
-            return (
-              <article key={platform} className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
-                <div className="mb-1.5 flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1.5 font-semibold text-slate-700">
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{ background: PLATFORM_BRAND[platform] }}
-                      aria-hidden="true"
-                    />
-                    {platform}
-                  </span>
-                  <span className="tabular-nums text-slate-500">{money(fees.totalFees)} fees</span>
-                </div>
-                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-                  {segments.map((seg) => (
-                    <div
-                      key={seg.key}
-                      style={{
-                        width: `${(seg.value / segmentTotal) * 100}%`,
-                        background: FEE_TYPE_COLORS[seg.key],
-                      }}
-                      title={`${seg.label}: ${money(seg.value)}`}
-                    />
-                  ))}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
-          {FEE_COMPOSITION.map((row) => (
-            <span key={row.key} className="flex items-center gap-1.5">
-              <span
-                className="h-2 w-2 rounded-sm"
-                style={{ background: FEE_TYPE_COLORS[row.key] }}
-                aria-hidden="true"
-              />
-              {row.label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <p className="text-[11px] leading-relaxed text-slate-500">
-        {copy.feesFootnote}
-      </p>
-
-      {/* Lark Review Modal */}
-      {isLarkModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Assign Lark Audit Review</h3>
-                <p className="text-[11px] text-slate-500">Dispatches webhook alert to Lark group</p>
-              </div>
-              <button
-                onClick={() => setIsLarkModalOpen(false)}
-                aria-label="Close Lark review dialog"
-                title="Close"
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700">Flagged Issue</label>
-                <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-amber-900">
-                  <span className="font-black">RM 158,143</span> Platform Fee Reconciliation Gap (May 2026)
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700">Assignee</label>
-                <select
-                  value={assignedOwner}
-                  onChange={(e) => setAssignedOwner(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs font-semibold text-slate-800"
-                >
-                  <option value="Finance Lead (fiqsss45)">fiqsss45 (Finance Lead)</option>
-                  <option value="Sabah Operations Team">Sabah Operations Team</option>
-                  <option value="Platform Reconciliation Team">Platform Reconciliation Specialist</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700">Audit Notes &amp; Action Required</label>
-                <textarea
-                  rows={3}
-                  value={larkNote}
-                  onChange={(e) => setLarkNote(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-2.5 text-xs text-slate-800 focus:border-[#0284C7] focus:ring-1 focus:ring-[#0284C7]"
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
-              <button
-                type="button"
-                onClick={() => setIsLarkModalOpen(false)}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSendLarkAlert}
-                className="flex items-center gap-1.5 rounded-lg bg-[#0284C7] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#0369A1] shadow-xs"
-              >
-                <SendHorizontal className="h-3.5 w-3.5" />
-                <span>Send Lark Webhook Alert</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-};
+}

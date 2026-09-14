@@ -32,6 +32,45 @@ export interface PLOutletRow {
   marginPct: number;
 }
 
+/** The five sales platforms as the original dataset keys them. */
+export type OriginalPlatform = 'grab' | 'foodpanda' | 'shopee' | 'apps' | 'pos';
+
+/** The four sales bases every metric block cycles through. */
+export interface OutletMetrics {
+  grossMenu: number;
+  net: number;
+  netSC: number;
+  netSCTax: number;
+}
+
+export interface OutletFees {
+  commission: number;
+  advertising: number;
+  platformFees: number;
+  gateway: number;
+  adjustments: number;
+}
+
+/**
+ * One outlet exactly as the original dashboard stores it (see
+ * src/data/originalOutlets.ts). Overview aggregates derive from these.
+ */
+export interface OriginalOutlet {
+  code: string;
+  name: string;
+  entity: string;
+  metrics: OutletMetrics;
+  byPlatform: Record<OriginalPlatform, OutletMetrics>;
+  payout: Record<OriginalPlatform, number>;
+  fees: Record<OriginalPlatform, OutletFees>;
+  purchases: number;
+  netAfterCommission: number;
+  commission: number;
+  reports: Record<string, boolean>;
+  missingReports: string[];
+  missingPos: boolean;
+}
+
 /**
  * Report state per outlet/channel. "Received" deliberately does not mean
  * verified — a file can arrive and still be waiting on reconciliation.

@@ -47,7 +47,7 @@ export const copy = {
   feesDeductedLabel: 'Deducted in settlements',
   feesReportTotalLabel: '1. Fee Report Item Total',
   feesFootnote:
-    'From May delivery-partner statements. Adjustments in green are refunds credited back.',
+    'From May delivery-partner statements. Negative adjustments are refunds credited back.',
   feesTableTitle: 'Platform Fee Itemization (May 2026)',
   feesTableSubtitle:
     'Includes Grab, FoodPanda, ShopeeFood, and US Pizza Apps. In-store POS excluded.',
@@ -58,10 +58,6 @@ export const copy = {
   coverageGrnNote: 'Basis for purchases. Matched to warehouse delivery tickets.',
   coverageSearchPlaceholder: 'Search outlet by name, store code, or region...',
   coverageNoMatch: 'No outlets match the selected search and filter criteria.',
-
-  // PlatformPanel
-  panelSubtitle: 'Cash received after discounts and fees.',
-  panelSource: 'From platform settlement reports',
 
   // App footer
   footerOps: 'Corporate Operations',
