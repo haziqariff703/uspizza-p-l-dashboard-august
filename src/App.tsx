@@ -4,7 +4,6 @@ import {
   KanbanBoard as Kanban,
   Table as TableIcon
 } from 'iconoir-react';
-import { AppSidebar } from './components/AppSidebar';
 import { TopBar } from './components/TopBar';
 import { TaskSummaryBar } from './components/TaskTracker/TaskSummaryBar';
 import { TaskKanbanView } from './components/TaskTracker/TaskKanbanView';
@@ -26,7 +25,8 @@ import {
   TaskStatus,
   OutletFinancialData,
   ActivityEvent,
-  ChannelFilter
+  ChannelFilter,
+  DashboardSection
 } from './types';
 
 export default function App() {
@@ -40,9 +40,9 @@ export default function App() {
   const [taskSubView, setTaskSubView] = useState<'kanban' | 'table'>('kanban');
   const [entityFilter, setEntityFilter] = useState<'all' | 'myUsPizza' | 'sabah'>('all');
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>('All');
-  const [dashboardSection, setDashboardSection] = useState<'overview' | 'fees' | 'coverage'>('overview');
+  const [dashboardSection, setDashboardSection] = useState<DashboardSection>('overview');
   const [isLiveSync, setIsLiveSync] = useState<boolean>(true);
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [selectedOutletCode, setSelectedOutletCode] = useState<string | null>(null);
 
   // Modals
   const [selectedTask, setSelectedTask] = useState<UserTask | null>(null);
@@ -360,6 +360,13 @@ export default function App() {
     });
   }, [addActivity]);
 
+  // Navbar search result → jump straight to that outlet's P&L page
+  const handleJumpToOutlet = useCallback((code: string) => {
+    setCurrentTab('dashboard');
+    setDashboardSection('plByOutlet');
+    setSelectedOutletCode(code);
+  }, []);
+
   // Real-time interval simulation when Live Sync is enabled
   useEffect(() => {
     if (!isLiveSync) return;
@@ -388,43 +395,24 @@ export default function App() {
         </div>
       )}
 
-      {/* Left Sidebar (fixed rail + mobile drawer) */}
-      <AppSidebar
-        currentTab={currentTab}
-        onTabChange={setCurrentTab}
-        entityFilter={entityFilter}
-        onEntityFilterChange={setEntityFilter}
-        channelFilter={channelFilter}
-        onChannelFilterChange={setChannelFilter}
-        dashboardSection={dashboardSection}
-        onDashboardSectionChange={setDashboardSection}
-        showDashboardControls={currentTab === 'dashboard'}
-        pendingTasksCount={pendingTasksCount}
-        overallProgress={overallProgress}
-        sidebarOpen={sidebarOpen}
-        onCloseSidebar={() => setSidebarOpen(false)}
-      />
-
-      {/* Mobile backdrop */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden motion-reduce:transition-none"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Content column */}
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:pl-64">
+      {/* Content column (navbar replaces the former sidebar entirely) */}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <TopBar
           currentTab={currentTab}
+          onTabChange={setCurrentTab}
           entityFilter={entityFilter}
+          onEntityFilterChange={setEntityFilter}
           channelFilter={channelFilter}
+          onChannelFilterChange={setChannelFilter}
+          dashboardSection={dashboardSection}
+          onDashboardSectionChange={setDashboardSection}
+          pendingTasksCount={pendingTasksCount}
+          overallProgress={overallProgress}
           isLiveSync={isLiveSync}
           onToggleLiveSync={() => setIsLiveSync(!isLiveSync)}
           onOpenNewTask={() => setIsCreateModalOpen(true)}
           onSimulateEvent={handleSimulateEvent}
-          onOpenSidebar={() => setSidebarOpen(true)}
+          onJumpToOutlet={handleJumpToOutlet}
         />
 
         {/* App Body Content */}
@@ -535,6 +523,8 @@ export default function App() {
             section={dashboardSection}
             outlets={outlets}
             onGoToTasks={() => setCurrentTab('tasks')}
+            selectedOutletCode={selectedOutletCode}
+            onSelectOutlet={setSelectedOutletCode}
           />
         )}
 

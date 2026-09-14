@@ -1,4 +1,4 @@
-import { OutletFinancialData, UserTask, ActivityEvent } from '../types';
+import { OutletFinancialData, UserTask, ActivityEvent, PLOutletRow } from '../types';
 
 export const ENTITY_TOTALS = {
   all: {
@@ -941,3 +941,77 @@ export const INITIAL_ACTIVITIES: ActivityEvent[] = [
     type: 'complete',
   },
 ];
+
+/**
+ * Real per-outlet P&L, transcribed from docs/original-capture.html (the
+ * captured original dashboard at `/`) — all 44 outlets, sorted by gross
+ * profit descending as in that capture's own default sort.
+ *
+ * Entity split (Bundusan + Inanam = Sabah, everyone else MY US PIZZA) follows
+ * that capture exactly. Note this differs from INITIAL_OUTLETS above, whose
+ * smaller 21-outlet set instead tags Vivacity Kuching as the Sabah entity —
+ * the two datasets predate each other and haven't been reconciled.
+ */
+export const PL_BY_OUTLET: PLOutletRow[] = [
+  { name: 'Vivacity Kuching', code: 'MY-076', entity: 'MY US PIZZA', netSales: 145251, purchases: 27394, grossProfit: 117858, marginPct: 81.1 },
+  { name: 'Dang Wangi', code: 'MY-007', entity: 'MY US PIZZA', netSales: 120689, purchases: 42307, grossProfit: 78383, marginPct: 64.9 },
+  { name: 'Dpulze Cyberjaya', code: 'MY-030', entity: 'MY US PIZZA', netSales: 152581, purchases: 75909, grossProfit: 76671, marginPct: 50.2 },
+  { name: 'Mount Austin', code: 'MY-015', entity: 'MY US PIZZA', netSales: 125560, purchases: 56860, grossProfit: 68700, marginPct: 54.7 },
+  { name: 'ST Rosyam Mall Klang', code: 'MY-026', entity: 'MY US PIZZA', netSales: 111989, purchases: 45000, grossProfit: 66989, marginPct: 59.8 },
+  { name: 'Greenlane', code: 'MY-020', entity: 'MY US PIZZA', netSales: 115170, purchases: 49913, grossProfit: 65257, marginPct: 56.7 },
+  { name: 'Sri Petaling', code: 'MY-028', entity: 'MY US PIZZA', netSales: 114178, purchases: 49136, grossProfit: 65042, marginPct: 57.0 },
+  { name: 'Lotus Seberang Jaya', code: 'MY-037', entity: 'MY US PIZZA', netSales: 95865, purchases: 35034, grossProfit: 60831, marginPct: 63.5 },
+  { name: 'Senawang', code: 'MY-013', entity: 'MY US PIZZA', netSales: 91493, purchases: 33363, grossProfit: 58130, marginPct: 63.5 },
+  { name: 'Puchong Jaya', code: 'MY-036', entity: 'MY US PIZZA', netSales: 89213, purchases: 31494, grossProfit: 57719, marginPct: 64.7 },
+  { name: 'Bundusan', code: 'SB-020', entity: 'Sabah', netSales: 77339, purchases: 20067, grossProfit: 57272, marginPct: 74.1 },
+  { name: 'Ampang', code: 'MY-002', entity: 'MY US PIZZA', netSales: 85790, purchases: 31965, grossProfit: 53825, marginPct: 62.7 },
+  { name: 'Inanam', code: 'SB-032', entity: 'Sabah', netSales: 63573, purchases: 10703, grossProfit: 52870, marginPct: 83.2 },
+  { name: 'Pandan Indah', code: 'MY-008', entity: 'MY US PIZZA', netSales: 90831, purchases: 37990, grossProfit: 52841, marginPct: 58.2 },
+  { name: 'Seri Kembangan', code: 'MY-003', entity: 'MY US PIZZA', netSales: 82138, purchases: 29579, grossProfit: 52559, marginPct: 64.0 },
+  { name: 'Kota Warisan', code: 'MY-009', entity: 'MY US PIZZA', netSales: 90868, purchases: 38705, grossProfit: 52163, marginPct: 57.4 },
+  { name: 'Kiara Bay', code: 'MY-040', entity: 'MY US PIZZA', netSales: 80487, purchases: 28608, grossProfit: 51879, marginPct: 64.5 },
+  { name: 'Lucerne Residence Penang', code: 'MY-078', entity: 'MY US PIZZA', netSales: 93489, purchases: 43490, grossProfit: 49999, marginPct: 53.5 },
+  { name: 'SS2', code: 'MY-005', entity: 'MY US PIZZA', netSales: 83337, purchases: 33739, grossProfit: 49597, marginPct: 59.5 },
+  { name: 'Sungai Petani', code: 'MY-027', entity: 'MY US PIZZA', netSales: 77942, purchases: 29584, grossProfit: 48359, marginPct: 62.0 },
+  { name: 'Seremban', code: 'MY-012', entity: 'MY US PIZZA', netSales: 76710, purchases: 29114, grossProfit: 47596, marginPct: 62.0 },
+  { name: 'Summerton', code: 'MY-021', entity: 'MY US PIZZA', netSales: 93857, purchases: 47184, grossProfit: 46674, marginPct: 49.7 },
+  { name: 'Bukit Mertajam', code: 'MY-023', entity: 'MY US PIZZA', netSales: 74204, purchases: 28049, grossProfit: 46156, marginPct: 62.2 },
+  { name: 'Taman Universiti', code: 'MY-017', entity: 'MY US PIZZA', netSales: 80659, purchases: 34895, grossProfit: 45764, marginPct: 56.7 },
+  { name: 'Ayer Keroh', code: 'MY-010', entity: 'MY US PIZZA', netSales: 73377, purchases: 27821, grossProfit: 45556, marginPct: 62.1 },
+  { name: 'Citta Mall', code: 'MY-032', entity: 'MY US PIZZA', netSales: 73971, purchases: 28849, grossProfit: 45123, marginPct: 61.0 },
+  { name: 'SS15', code: 'MY-004', entity: 'MY US PIZZA', netSales: 81338, purchases: 38302, grossProfit: 43036, marginPct: 52.9 },
+  { name: 'Gamuda Cove', code: 'MY-039', entity: 'MY US PIZZA', netSales: 58309, purchases: 17141, grossProfit: 41168, marginPct: 70.6 },
+  { name: 'SB Mall', code: 'MY-031', entity: 'MY US PIZZA', netSales: 71164, purchases: 30821, grossProfit: 40343, marginPct: 56.7 },
+  { name: 'Simpang Ampat', code: 'MY-024', entity: 'MY US PIZZA', netSales: 64443, purchases: 24109, grossProfit: 40334, marginPct: 62.6 },
+  { name: 'Kamunting Taiping', code: 'MY-035', entity: 'MY US PIZZA', netSales: 69815, purchases: 29568, grossProfit: 40247, marginPct: 57.6 },
+  { name: 'Batu Pahat Mall', code: 'MY-038', entity: 'MY US PIZZA', netSales: 62004, purchases: 22687, grossProfit: 39317, marginPct: 63.4 },
+  { name: 'USJ Taipan', code: 'MY-006', entity: 'MY US PIZZA', netSales: 67793, purchases: 28893, grossProfit: 38900, marginPct: 57.4 },
+  { name: 'Kelana Jaya', code: 'MY-001', entity: 'MY US PIZZA', netSales: 58608, purchases: 22045, grossProfit: 36563, marginPct: 62.4 },
+  { name: 'Raja Uda', code: 'MY-022', entity: 'MY US PIZZA', netSales: 57533, purchases: 24717, grossProfit: 32815, marginPct: 57.0 },
+  { name: 'Simee Ipoh', code: 'MY-018', entity: 'MY US PIZZA', netSales: 57680, purchases: 25026, grossProfit: 32654, marginPct: 56.6 },
+  { name: 'Mydin Subang Jaya', code: 'MY-033', entity: 'MY US PIZZA', netSales: 48872, purchases: 16950, grossProfit: 31922, marginPct: 65.3 },
+  { name: 'Banting', code: 'MY-034', entity: 'MY US PIZZA', netSales: 56919, purchases: 26569, grossProfit: 30349, marginPct: 53.3 },
+  { name: 'Anggun City', code: 'MY-041', entity: 'MY US PIZZA', netSales: 66472, purchases: 37504, grossProfit: 28968, marginPct: 43.6 },
+  { name: 'Hextar World Empire City', code: 'MY-075', entity: 'MY US PIZZA', netSales: 42485, purchases: 14590, grossProfit: 27895, marginPct: 65.7 },
+  { name: 'Skudai', code: 'MY-016', entity: 'MY US PIZZA', netSales: 51855, purchases: 25252, grossProfit: 26603, marginPct: 51.3 },
+  { name: 'Kota Laksamana', code: 'MY-011', entity: 'MY US PIZZA', netSales: 49109, purchases: 23730, grossProfit: 25379, marginPct: 51.7 },
+  { name: 'Batu Pahat', code: 'MY-014', entity: 'MY US PIZZA', netSales: 39003, purchases: 17661, grossProfit: 21342, marginPct: 54.7 },
+  { name: 'Tanjung Tokong', code: 'MY-025', entity: 'MY US PIZZA', netSales: 39628, purchases: 18575, grossProfit: 21053, marginPct: 53.1 },
+];
+
+/** Net-sales split by platform, verified for these 13 outlets only (from src/data's own INITIAL_OUTLETS). */
+export const PLATFORM_DETAIL_BY_OUTLET: Record<string, { Grab: number; FoodPanda: number; Shopee: number; Apps: number; POS: number }> = {
+  'Dpulze Cyberjaya': { Grab: 61442, FoodPanda: 27056, Shopee: 28058, Apps: 9524, POS: 26501 },
+  'Vivacity Kuching': { Grab: 55200, FoodPanda: 26800, Shopee: 29100, Apps: 9851, POS: 24300 },
+  'Dang Wangi': { Grab: 49288, FoodPanda: 22175, Shopee: 17298, Apps: 7491, POS: 24437 },
+  'Mount Austin': { Grab: 50224, FoodPanda: 22600, Shopee: 23856, Apps: 8780, POS: 20100 },
+  'ST Rosyam Mall Klang': { Grab: 44795, FoodPanda: 20158, Shopee: 21277, Apps: 7839, POS: 17920 },
+  'Greenlane': { Grab: 46068, FoodPanda: 20730, Shopee: 21882, Apps: 8062, POS: 18428 },
+  'Sri Petaling': { Grab: 46239, FoodPanda: 14515, Shopee: 25917, Apps: 7878, POS: 19629 },
+  'Lucerne Residence Penang': { Grab: 20936, FoodPanda: 9720, Shopee: 18010, Apps: 13459, POS: 33135 },
+  'Pandan Indah': { Grab: 37520, FoodPanda: 16880, Shopee: 17820, Apps: 6560, POS: 15020 },
+  'Summerton': { Grab: 38000, FoodPanda: 17100, Shopee: 18050, Apps: 6650, POS: 15200 },
+  'Puchong Jaya': { Grab: 36200, FoodPanda: 16290, Shopee: 17195, Apps: 6335, POS: 14480 },
+  'Senawang': { Grab: 35848, FoodPanda: 16132, Shopee: 17028, Apps: 6274, POS: 14340 },
+  'Lotus Seberang Jaya': { Grab: 36000, FoodPanda: 16200, Shopee: 17100, Apps: 6300, POS: 14400 },
+};
