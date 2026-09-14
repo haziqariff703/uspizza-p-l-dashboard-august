@@ -13,7 +13,7 @@ export type DashboardSection =
   | 'coverage'
   | 'salesByOutlet'
   | 'purchasesByOutlet'
-  | 'grossSalesByOutlet'
+  | 'purchasesToNetSales'
   | 'plByOutlet';
 
 /**

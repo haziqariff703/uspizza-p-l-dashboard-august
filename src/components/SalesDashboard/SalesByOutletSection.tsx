@@ -5,19 +5,18 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  LabelList,
   Tooltip,
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { OutletFinancialData } from '../../types';
 import { PLATFORM_BRAND } from '../../platformColors';
+import { FULL_OUTLET_SALES } from '../../data/fullOutletSales';
+import { PL_BY_OUTLET } from '../../data/outletData';
 
-interface SalesByOutletSectionProps {
-  outlets: OutletFinancialData[];
-}
-
-type Metric = 'gross' | 'net' | 'netSc' | 'netScTax';
+type Metric = 'gross' | 'discount' | 'net' | 'netSc' | 'netScTax';
 type ViewMode = 'total' | 'platform';
+type EntityFilter = 'all' | 'myUsPizza' | 'sabah';
 
 const PLATFORM_KEYS = ['Grab', 'FoodPanda', 'Shopee', 'Apps', 'POS'] as const;
 type PlatformKey = (typeof PLATFORM_KEYS)[number];
@@ -25,8 +24,6 @@ type PlatformKey = (typeof PLATFORM_KEYS)[number];
 const PLATFORM_COLORS = PLATFORM_BRAND as Record<PlatformKey, string>;
 
 const TOTAL_COLOR = '#0B192C';
-
-const INITIAL_ROWS = 12;
 
 interface Row {
   id: string;
@@ -39,51 +36,97 @@ interface Row {
   POS: number;
 }
 
-export const SalesByOutletSection: React.FC<SalesByOutletSectionProps> = ({ outlets }) => {
+const TotalSalesLabel = ({
+  x = 0,
+  y = 0,
+  width = 0,
+  height = 0,
+  value,
+}: {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  value?: number;
+}) => {
+  if (typeof value !== 'number') return null;
+
+  return (
+    <text
+      x={x + width + 6}
+      y={y + height / 2}
+      dominantBaseline="middle"
+      fill="#334155"
+      fontSize={10}
+      fontWeight={700}
+      textAnchor="start"
+    >
+      {`RM ${Math.round(value).toLocaleString()}`}
+    </text>
+  );
+};
+
+const PlatformLegend = () => (
+  <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 pt-2 text-[11px] text-slate-600">
+    {PLATFORM_KEYS.map((key) => (
+      <span key={key} className="flex items-center gap-1.5">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: PLATFORM_COLORS[key] }} />
+        {key}
+      </span>
+    ))}
+  </div>
+);
+
+export const SalesByOutletSection: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
   const [metric, setMetric] = useState<Metric>('gross');
   const [viewMode, setViewMode] = useState<ViewMode>('platform');
-  const [showAll, setShowAll] = useState(false);
-
-  const tradingOutlets = useMemo(() => outlets.filter((o) => o.status === 'active'), [outlets]);
 
   const rows: Row[] = useMemo(() => {
-    const valueOf = (o: OutletFinancialData) => {
-      if (metric === 'gross') return o.grossSales;
-      if (metric === 'net') return o.netSales;
-      if (metric === 'netSc') return o.netSales + o.serviceCharge;
-      return o.netSales + o.serviceCharge + o.taxSst;
+    const entityByCode = new Map(PL_BY_OUTLET.map((outlet) => [outlet.code, outlet.entity]));
+    const platformOf = (o: (typeof FULL_OUTLET_SALES)[number]): Record<PlatformKey, number> => {
+      const raw =
+        metric === 'gross'
+          ? o.platformGross
+          : metric === 'discount'
+            ? Object.fromEntries(
+                PLATFORM_KEYS.map((key) => [key, o.platformGross[key] - o.platformNet[key]])
+              ) as Record<PlatformKey, number>
+          : metric === 'net'
+            ? o.platformNet
+            : metric === 'netSc'
+              ? o.platformNetSc
+              : o.platformNetScTax;
+
+      return { ...raw };
     };
 
-    const platformOf = (o: OutletFinancialData): Record<PlatformKey, number> => {
-      const raw = metric === 'gross' ? o.platformGross : o.platformNet;
-      return {
-        Grab: raw.Grab || 0,
-        FoodPanda: raw.FoodPanda || 0,
-        Shopee: raw.Shopee || 0,
-        Apps: raw.Apps || 0,
-        POS: raw.POS || 0,
-      };
-    };
-
-    return [...tradingOutlets]
-      .sort((a, b) => valueOf(b) - valueOf(a))
+    return FULL_OUTLET_SALES.filter((o) => {
+      if (entityFilter === 'all') return true;
+      return entityFilter === 'sabah'
+        ? entityByCode.get(o.id) === 'Sabah'
+        : entityByCode.get(o.id) === 'MY US PIZZA';
+    })
       .map((o) => {
-        const platforms = platformOf(o);
-        return {
-          id: o.id,
-          name: o.name,
-          total: valueOf(o),
-          ...platforms,
-        };
+      const platforms = platformOf(o);
+      return {
+        id: o.id,
+        name: o.name,
+        total: PLATFORM_KEYS.reduce((sum, key) => sum + platforms[key], 0),
+        ...platforms,
+      };
+    })
+      .sort((a, b) => b.total - a.total)
+      .map((o) => {
+        return o;
       });
-  }, [tradingOutlets, metric]);
-
-  const visibleRows = showAll ? rows : rows.slice(0, INITIAL_ROWS);
+  }, [entityFilter, metric]);
 
   const getMetricTitle = () => {
     switch (metric) {
       case 'gross':
         return 'Gross Sales per HQ outlet · Menu selling price · sorted high → low';
+      case 'discount':
+        return 'Discount per HQ outlet · Gross sales − net sales · sorted high → low';
       case 'net':
         return 'Net Sales per HQ outlet · Menu price – discount · sorted high → low';
       case 'netSc':
@@ -94,7 +137,7 @@ export const SalesByOutletSection: React.FC<SalesByOutletSectionProps> = ({ outl
   };
 
   const totalLabel =
-    metric === 'gross' ? 'Gross Sales' : metric === 'net' ? 'Net Sales' : 'Net + SC + Tax';
+    metric === 'gross' ? 'Gross Sales' : metric === 'discount' ? 'Discount' : metric === 'net' ? 'Net Sales' : 'Net + SC + Tax';
 
   const CustomTooltip = ({
     active,
@@ -117,7 +160,7 @@ export const SalesByOutletSection: React.FC<SalesByOutletSectionProps> = ({ outl
                   {key}
                 </span>
                 <span className="font-semibold tabular-nums text-slate-900">
-                  RM {row[key].toLocaleString()}
+                  RM {Math.round(row[key]).toLocaleString()}
                 </span>
               </div>
             ))
@@ -128,14 +171,14 @@ export const SalesByOutletSection: React.FC<SalesByOutletSectionProps> = ({ outl
                 Total
               </span>
               <span className="font-semibold tabular-nums text-slate-900">
-                RM {row.total.toLocaleString()}
+                RM {Math.round(row.total).toLocaleString()}
               </span>
             </div>
           )}
         </div>
         <div className="mt-2 flex justify-between border-t border-slate-200 pt-1.5 font-extrabold text-slate-900">
           <span>{totalLabel}</span>
-          <span className="tabular-nums">RM {row.total.toLocaleString()}</span>
+          <span className="tabular-nums">RM {Math.round(row.total).toLocaleString()}</span>
         </div>
       </div>
     );
@@ -159,6 +202,7 @@ export const SalesByOutletSection: React.FC<SalesByOutletSectionProps> = ({ outl
         {(
           [
             ['gross', 'Gross'],
+            ['discount', 'Discount'],
             ['net', 'Net'],
             ['netSc', 'Net + SC'],
             ['netScTax', 'Net + SC + SST'],
@@ -203,12 +247,12 @@ export const SalesByOutletSection: React.FC<SalesByOutletSectionProps> = ({ outl
 
       {/* Ranked horizontal bar list */}
       <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:p-4">
-        <div style={{ width: '100%', height: visibleRows.length * 30 + 40 }}>
+        <div style={{ width: '100%', height: Math.max(rows.length * 36 + 120, 200) }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               layout="vertical"
-              data={visibleRows}
-              margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
+              data={rows}
+              margin={{ top: 8, right: 88, bottom: 8, left: 8 }}
               barCategoryGap="20%"
             >
               <CartesianGrid horizontal={false} stroke="#E2E8F0" />
@@ -229,40 +273,43 @@ export const SalesByOutletSection: React.FC<SalesByOutletSectionProps> = ({ outl
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F1F5F9' }} />
               <Legend
-                wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-                formatter={(value: string) => <span className="text-slate-600">{value}</span>}
+                content={<PlatformLegend />}
               />
               {viewMode === 'total' ? (
-                <Bar dataKey="total" name={totalLabel} fill={TOTAL_COLOR} radius={[0, 3, 3, 0]} />
-              ) : (
-                PLATFORM_KEYS.map((key) => (
-                  <Bar
-                    key={key}
-                    dataKey={key}
-                    name={key}
-                    stackId="platform"
-                    fill={PLATFORM_COLORS[key]}
-                    radius={key === PLATFORM_KEYS[PLATFORM_KEYS.length - 1] ? [0, 3, 3, 0] : undefined}
+                <Bar dataKey="total" name={totalLabel} fill={TOTAL_COLOR} radius={[0, 3, 3, 0]}>
+                  <LabelList
+                    dataKey="total"
+                    position="right"
+                    content={<TotalSalesLabel />}
                   />
-                ))
+                </Bar>
+              ) : (
+                PLATFORM_KEYS.map((key) => {
+                  const isFinalStack = key === PLATFORM_KEYS[PLATFORM_KEYS.length - 1];
+                  return (
+                    <Bar
+                      key={key}
+                      dataKey={key}
+                      name={key}
+                      stackId="platform"
+                      fill={PLATFORM_COLORS[key]}
+                      radius={isFinalStack ? [0, 3, 3, 0] : undefined}
+                    >
+                      {isFinalStack && (
+                        <LabelList
+                          dataKey="total"
+                          position="right"
+                          content={<TotalSalesLabel />}
+                        />
+                      )}
+                    </Bar>
+                  );
+                })
               )}
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Expand toggle */}
-        {rows.length > INITIAL_ROWS && (
-          <div className="mt-3 flex justify-center border-t border-slate-200 pt-3">
-            <button
-              type="button"
-              onClick={() => setShowAll((v) => !v)}
-              aria-expanded={showAll}
-              className="rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-400"
-            >
-              {showAll ? 'Show top 12' : `Show all ${rows.length}`}
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
