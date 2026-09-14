@@ -1,5 +1,20 @@
 export type ChannelType = 'POS' | 'Grab' | 'FoodPanda' | 'Shopee' | 'Web' | 'All';
 
+/**
+ * Sales platforms shown in the dashboard's platform panels. Distinct from
+ * ChannelType, which covers reporting channels (has Web, no Apps).
+ */
+export type ChannelFilter = 'All' | 'Grab' | 'FoodPanda' | 'Shopee' | 'Apps' | 'POS';
+
+/** Each dashboard section is its own page, picked from the navbar dropdown. */
+export type DashboardSection = 'overview' | 'fees' | 'coverage';
+
+/**
+ * Report state per outlet/channel. "Received" deliberately does not mean
+ * verified — a file can arrive and still be waiting on reconciliation.
+ */
+export type CoverageState = 'checked' | 'received' | 'missing' | 'na';
+
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'completed' | 'flagged';
 
 export type TaskPriority = 'urgent' | 'high' | 'medium' | 'low';

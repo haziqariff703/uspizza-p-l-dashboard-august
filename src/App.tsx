@@ -1,17 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import confetti from 'canvas-confetti';
-import { 
-  Kanban, 
-  Table as TableIcon, 
-  Plus, 
-  Activity, 
-  CheckCircle2, 
-  AlertCircle,
-  Clock,
-  Sparkles,
-  Info
-} from 'lucide-react';
-import { Navbar } from './components/Navbar';
+import {
+  KanbanBoard as Kanban,
+  Table as TableIcon
+} from 'iconoir-react';
+import { AppSidebar } from './components/AppSidebar';
+import { TopBar } from './components/TopBar';
 import { TaskSummaryBar } from './components/TaskTracker/TaskSummaryBar';
 import { TaskKanbanView } from './components/TaskTracker/TaskKanbanView';
 import { TaskTableView } from './components/TaskTracker/TaskTableView';
@@ -27,11 +21,12 @@ import {
   INITIAL_ACTIVITIES, 
   TEAM_MEMBERS 
 } from './data/outletData';
-import { 
-  UserTask, 
-  TaskStatus, 
-  OutletFinancialData, 
-  ActivityEvent 
+import {
+  UserTask,
+  TaskStatus,
+  OutletFinancialData,
+  ActivityEvent,
+  ChannelFilter
 } from './types';
 
 export default function App() {
@@ -41,10 +36,13 @@ export default function App() {
   const [activities, setActivities] = useState<ActivityEvent[]>(INITIAL_ACTIVITIES);
   
   // Navigation & Filter States
-  const [currentTab, setCurrentTab] = useState<'tasks' | 'dashboard' | 'matrix'>('tasks');
+  const [currentTab, setCurrentTab] = useState<'tasks' | 'dashboard' | 'matrix'>('dashboard');
   const [taskSubView, setTaskSubView] = useState<'kanban' | 'table'>('kanban');
   const [entityFilter, setEntityFilter] = useState<'all' | 'myUsPizza' | 'sabah'>('all');
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>('All');
+  const [dashboardSection, setDashboardSection] = useState<'overview' | 'fees' | 'coverage'>('overview');
   const [isLiveSync, setIsLiveSync] = useState<boolean>(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
   // Modals
   const [selectedTask, setSelectedTask] = useState<UserTask | null>(null);
@@ -377,7 +375,7 @@ export default function App() {
   }, [isLiveSync, handleSimulateEvent]);
 
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-900 flex flex-col font-sans selection:bg-rose-500 selection:text-white">
+    <div className="min-h-screen bg-slate-100/70 text-slate-900 font-sans selection:bg-rose-500 selection:text-white">
       
       {/* Real-time Toast Banner */}
       {lastNotification && (
@@ -390,22 +388,47 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Navbar */}
-      <Navbar
+      {/* Left Sidebar (fixed rail + mobile drawer) */}
+      <AppSidebar
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         entityFilter={entityFilter}
         onEntityFilterChange={setEntityFilter}
-        isLiveSync={isLiveSync}
-        onToggleLiveSync={() => setIsLiveSync(!isLiveSync)}
-        onOpenNewTask={() => setIsCreateModalOpen(true)}
-        onSimulateEvent={handleSimulateEvent}
+        channelFilter={channelFilter}
+        onChannelFilterChange={setChannelFilter}
+        dashboardSection={dashboardSection}
+        onDashboardSectionChange={setDashboardSection}
+        showDashboardControls={currentTab === 'dashboard'}
         pendingTasksCount={pendingTasksCount}
         overallProgress={overallProgress}
+        sidebarOpen={sidebarOpen}
+        onCloseSidebar={() => setSidebarOpen(false)}
       />
 
-      {/* App Body Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden motion-reduce:transition-none"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Content column */}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:pl-64">
+        <TopBar
+          currentTab={currentTab}
+          entityFilter={entityFilter}
+          channelFilter={channelFilter}
+          isLiveSync={isLiveSync}
+          onToggleLiveSync={() => setIsLiveSync(!isLiveSync)}
+          onOpenNewTask={() => setIsCreateModalOpen(true)}
+          onSimulateEvent={handleSimulateEvent}
+          onOpenSidebar={() => setSidebarOpen(true)}
+        />
+
+        {/* App Body Content */}
+        <main className="min-w-0 flex-1 space-y-6 px-5 py-6 lg:px-8">
         
         {/* VIEW 1: USER TASKS & REAL-TIME TRACKER */}
         {currentTab === 'tasks' && (
@@ -456,7 +479,7 @@ export default function App() {
                 </span>
                 <span>·</span>
                 <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-sky-500"></span>
                   {tasks.filter(t => t.status === 'in_progress').length} In Progress
                 </span>
                 <span>·</span>
@@ -508,6 +531,8 @@ export default function App() {
         {currentTab === 'dashboard' && (
           <SalesDashboard
             entityFilter={entityFilter}
+            channelFilter={channelFilter}
+            section={dashboardSection}
             outlets={outlets}
             onGoToTasks={() => setCurrentTab('tasks')}
           />
@@ -536,6 +561,23 @@ export default function App() {
 
       </main>
 
+        {/* Footer */}
+        <footer className="mt-12 border-t border-slate-200 bg-white py-5 text-center text-xs text-slate-500">
+          <div className="flex flex-col items-center justify-between gap-2 px-5 sm:flex-row lg:px-8">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span className="font-extrabold text-slate-800">US PIZZA</span>
+              <span>·</span>
+              <span>Corporate Outlets Operations & Audit Hub</span>
+              <span>·</span>
+              <span>Period: May 2026</span>
+            </div>
+            <div className="text-[11px] text-slate-400">
+              Real-Time Engine Active · 44 Corporate Outlets · MY US PIZZA & Sabah Entities
+            </div>
+          </div>
+        </footer>
+      </div>
+
       {/* Task Details Modal with Real-time Checklist & Audit Chat */}
       <TaskDetailModal
         task={selectedTask}
@@ -552,22 +594,6 @@ export default function App() {
         onClose={() => setIsCreateModalOpen(false)}
         onCreateTask={handleCreateTask}
       />
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 mt-12 py-5 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-slate-800">US PIZZA</span>
-            <span>·</span>
-            <span>Corporate Outlets Operations & Audit Hub</span>
-            <span>·</span>
-            <span>Period: May 2026</span>
-          </div>
-          <div className="text-[11px] text-slate-400">
-            Real-Time Engine Active · 44 Corporate Outlets · MY US PIZZA & Sabah Entities
-          </div>
-        </div>
-      </footer>
 
     </div>
   );

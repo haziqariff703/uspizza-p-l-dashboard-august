@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle, 
-  Building2, 
-  Search, 
-  Plus, 
-  FileText,
-  TrendingUp,
-  AlertTriangle,
-  ExternalLink
-} from 'lucide-react';
+import {
+  CheckCircle as CheckCircle2,
+  Clock,
+  Search,
+  Plus,
+  WarningTriangle as AlertTriangle
+} from 'iconoir-react';
 import { OutletFinancialData } from '../../types';
 
 interface OutletCoverageMatrixProps {
@@ -73,7 +68,7 @@ export const OutletCoverageMatrix: React.FC<OutletCoverageMatrixProps> = ({
         );
       case 'in_progress':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
             <Clock className="w-3 h-3" /> In Progress
           </span>
         );
@@ -98,18 +93,16 @@ export const OutletCoverageMatrix: React.FC<OutletCoverageMatrixProps> = ({
       <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700">
-                <Building2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                  Data Coverage & Outlet Audit Matrix
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Tracks whether every trading outlet has all 5 channel reports + GRN verification for May 2026.
-                </p>
-              </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                Outlet Audit
+              </span>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                Data Coverage & Outlet Audit Matrix
+              </h2>
+              <p className="text-xs text-slate-500">
+                Tracks whether every trading outlet has all 5 channel reports + GRN verification for May 2026.
+              </p>
             </div>
           </div>
 

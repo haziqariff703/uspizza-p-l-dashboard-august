@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { Xmark as X, Trash as Trash2 } from 'iconoir-react';
 import { UserTask, TaskCategory, TaskPriority, ChannelType } from '../../types';
 import { INITIAL_OUTLETS, TEAM_MEMBERS } from '../../data/outletData';
 
@@ -104,6 +104,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           </div>
           <button 
             onClick={onClose}
+            aria-label="Close create task dialog"
+            title="Close"
             className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200"
           >
             <X className="w-5 h-5" />

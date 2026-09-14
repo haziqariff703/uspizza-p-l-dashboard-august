@@ -1,14 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Search, 
-  Filter, 
-  ArrowUpDown, 
-  ExternalLink, 
-  CheckCircle2, 
-  Clock, 
-  AlertTriangle,
-  ChevronDown
-} from 'lucide-react';
+import {
+  Search,
+  OpenNewWindow as ExternalLink
+} from 'iconoir-react';
 import { UserTask, TaskStatus, TaskPriority, ChannelType } from '../../types';
 
 interface TaskTableViewProps {
@@ -19,7 +13,7 @@ interface TaskTableViewProps {
 
 const STATUS_LABELS: Record<TaskStatus, { label: string; bg: string; text: string }> = {
   todo: { label: 'To Do', bg: 'bg-slate-100', text: 'text-slate-700' },
-  in_progress: { label: 'In Progress', bg: 'bg-blue-100', text: 'text-blue-800' },
+  in_progress: { label: 'In Progress', bg: 'bg-sky-100', text: 'text-sky-800' },
   in_review: { label: 'Under Review', bg: 'bg-amber-100', text: 'text-amber-800' },
   completed: { label: 'Completed', bg: 'bg-emerald-100', text: 'text-emerald-800' },
   flagged: { label: 'Discrepancy', bg: 'bg-rose-100', text: 'text-rose-800' },
@@ -28,7 +22,7 @@ const STATUS_LABELS: Record<TaskStatus, { label: string; bg: string; text: strin
 const PRIORITY_BADGES: Record<TaskPriority, string> = {
   urgent: 'bg-red-50 text-red-700 border-red-200',
   high: 'bg-orange-50 text-orange-700 border-orange-200',
-  medium: 'bg-blue-50 text-blue-700 border-blue-200',
+  medium: 'bg-sky-50 text-sky-700 border-sky-200',
   low: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
@@ -214,7 +208,7 @@ export const TaskTableView: React.FC<TaskTableViewProps> = ({
                             task.progress === 100 
                               ? 'bg-emerald-500' 
                               : task.progress > 50 
-                              ? 'bg-blue-500' 
+                              ? 'bg-sky-500' 
                               : 'bg-amber-500'
                           }`}
                           style={{ width: `${task.progress}%` }}

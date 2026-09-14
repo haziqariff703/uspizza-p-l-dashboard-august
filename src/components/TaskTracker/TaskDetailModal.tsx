@@ -1,19 +1,13 @@
 import React, { useState } from 'react';
-import { 
-  X, 
-  CheckSquare, 
-  Square, 
-  Plus, 
-  Paperclip, 
-  Send, 
-  Clock, 
-  AlertTriangle, 
-  Calendar, 
-  User, 
-  Layers, 
-  CheckCircle2,
-  Trash2
-} from 'lucide-react';
+import {
+  Xmark as X,
+  Square,
+  Plus,
+  Attachment as Paperclip,
+  Send,
+  WarningTriangle as AlertTriangle,
+  CheckCircle as CheckCircle2
+} from 'iconoir-react';
 import { UserTask, TaskStatus, TaskPriority, ChecklistItem } from '../../types';
 
 interface TaskDetailModalProps {
@@ -85,6 +79,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
           <button
             onClick={onClose}
+            aria-label="Close task details dialog"
+            title="Close"
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
           >
             <X className="w-5 h-5" />

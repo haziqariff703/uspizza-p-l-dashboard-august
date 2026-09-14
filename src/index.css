@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+@theme {
+  /* Neutral grotesque stack — no web-font dependency, no "AI slop" Inter/Geist default */
+  --font-sans: "Arial", "Helvetica Neue", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Financial figures use a monospace tabular face */
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+}
+
+:root{font-family:var(--font-sans);color:#0f172a;background:#f1f5f9}
+html{scroll-behavior:smooth}
+body{margin:0}
+button,a{-webkit-tap-highlight-color:transparent}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid rgba(15,23,42,.3);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}#app-sidebar{transition:none!important}}

@@ -1,13 +1,4 @@
 import React from 'react';
-import { 
-  Activity, 
-  CheckCircle2, 
-  MessageSquare, 
-  AlertTriangle, 
-  Sparkles, 
-  RefreshCw,
-  Clock
-} from 'lucide-react';
 import { ActivityEvent } from '../../types';
 
 interface LiveActivityFeedProps {
@@ -22,21 +13,21 @@ export const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
   isLiveSync,
   onSimulateEvent,
 }) => {
-  const getEventIcon = (type: ActivityEvent['type']) => {
+  const getEventDotColor = (type: ActivityEvent['type']) => {
     switch (type) {
       case 'complete':
       case 'checklist_step':
-        return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />;
+        return 'bg-emerald-500';
       case 'update':
       case 'status_change':
-        return <RefreshCw className="w-3.5 h-3.5 text-blue-600" />;
+        return 'bg-sky-500';
       case 'comment':
-        return <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />;
+        return 'bg-sky-500';
       case 'flag':
       case 'discrepancy_flag':
-        return <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />;
+        return 'bg-rose-500';
       default:
-        return <Activity className="w-3.5 h-3.5 text-slate-500" />;
+        return 'bg-slate-400';
     }
   };
 
@@ -65,7 +56,6 @@ export const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold transition-all border border-rose-200"
           title="Simulate random live user action or audit sync"
         >
-          <Sparkles className="w-3 h-3" />
           <span>Simulate Live Event</span>
         </button>
       </div>
@@ -74,9 +64,10 @@ export const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
       <div className="p-3 space-y-2 max-h-72 overflow-y-auto divide-y divide-slate-100">
         {activities.map(evt => (
           <div key={evt.id} className="pt-2 first:pt-0 flex items-start gap-2.5 text-xs">
-            <div className="p-1 rounded-full bg-slate-100 shrink-0 mt-0.5">
-              {getEventIcon(evt.type)}
-            </div>
+            <span
+              className={`h-2 w-2 rounded-full shrink-0 mt-1 ${getEventDotColor(evt.type)}`}
+              aria-hidden="true"
+            />
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
