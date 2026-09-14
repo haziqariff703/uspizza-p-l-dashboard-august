@@ -1,16 +1,9 @@
 import React from 'react';
-import { 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle, 
-  ChevronRight, 
-  ChevronLeft,
-  Paperclip, 
-  MessageSquare, 
-  Calendar,
-  Layers,
-  ArrowUpRight
-} from 'lucide-react';
+import {
+  NavArrowRight as ChevronRight,
+  Attachment as Paperclip,
+  ChatBubble as MessageSquare
+} from 'iconoir-react';
 import { UserTask, TaskStatus } from '../../types';
 
 interface TaskKanbanViewProps {
@@ -21,7 +14,7 @@ interface TaskKanbanViewProps {
 
 const COLUMNS: { status: TaskStatus; label: string; dotColor: string; bgHeader: string }[] = [
   { status: 'todo', label: 'To Do', dotColor: 'bg-slate-400', bgHeader: 'bg-slate-50 border-slate-200' },
-  { status: 'in_progress', label: 'In Progress', dotColor: 'bg-blue-500', bgHeader: 'bg-blue-50/50 border-blue-200' },
+  { status: 'in_progress', label: 'In Progress', dotColor: 'bg-sky-500', bgHeader: 'bg-sky-50/50 border-sky-200' },
   { status: 'in_review', label: 'Under Review', dotColor: 'bg-amber-500', bgHeader: 'bg-amber-50/50 border-amber-200' },
   { status: 'completed', label: 'Completed', dotColor: 'bg-emerald-500', bgHeader: 'bg-emerald-50/50 border-emerald-200' },
   { status: 'flagged', label: 'Discrepancy / Flagged', dotColor: 'bg-rose-500', bgHeader: 'bg-rose-50/50 border-rose-200' },
@@ -30,7 +23,7 @@ const COLUMNS: { status: TaskStatus; label: string; dotColor: string; bgHeader: 
 const PRIORITY_STYLES = {
   urgent: 'bg-red-50 text-red-700 border-red-200',
   high: 'bg-orange-50 text-orange-700 border-orange-200',
-  medium: 'bg-blue-50 text-blue-700 border-blue-200',
+  medium: 'bg-sky-50 text-sky-700 border-sky-200',
   low: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
@@ -46,9 +39,9 @@ const CHANNEL_COLORS: Record<string, string> = {
   Grab: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   FoodPanda: 'bg-pink-50 text-pink-700 border-pink-200',
   Shopee: 'bg-orange-50 text-orange-700 border-orange-200',
-  Web: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  Web: 'bg-sky-50 text-sky-700 border-sky-200',
   POS: 'bg-slate-100 text-slate-700 border-slate-200',
-  All: 'bg-purple-50 text-purple-700 border-purple-200',
+  All: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
 export const TaskKanbanView: React.FC<TaskKanbanViewProps> = ({
@@ -155,7 +148,7 @@ export const TaskKanbanView: React.FC<TaskKanbanViewProps> = ({
                                 task.progress === 100 
                                   ? 'bg-emerald-500' 
                                   : task.progress > 50 
-                                  ? 'bg-blue-500' 
+                                  ? 'bg-sky-500' 
                                   : 'bg-amber-500'
                               }`}
                               style={{ width: `${task.progress}%` }}

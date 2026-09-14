@@ -1,311 +1,274 @@
-import React, { useState, useRef } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import { OutletFinancialData } from '../../types';
 
 interface SalesByOutletSectionProps {
   outlets: OutletFinancialData[];
 }
 
+type Metric = 'gross' | 'net' | 'netSc' | 'netScTax';
+type ViewMode = 'total' | 'platform';
+
+const PLATFORM_KEYS = ['Grab', 'FoodPanda', 'Shopee', 'Apps', 'POS'] as const;
+type PlatformKey = (typeof PLATFORM_KEYS)[number];
+
+// Official brand hexes from DESIGN.md
+const PLATFORM_COLORS: Record<PlatformKey, string> = {
+  Grab: '#00B14F',
+  FoodPanda: '#D70F64',
+  Shopee: '#EE4D2D',
+  Apps: '#C8102E',
+  POS: '#334155',
+};
+
+const TOTAL_COLOR = '#0B192C';
+
+const INITIAL_ROWS = 12;
+
+interface Row {
+  id: string;
+  name: string;
+  total: number;
+  Grab: number;
+  FoodPanda: number;
+  Shopee: number;
+  Apps: number;
+  POS: number;
+}
+
 export const SalesByOutletSection: React.FC<SalesByOutletSectionProps> = ({ outlets }) => {
-  const [metric, setMetric] = useState<'gross' | 'net' | 'netSc' | 'netScTax'>('gross');
-  const [viewMode, setViewMode] = useState<'total' | 'platform'>('platform');
-  const [hoveredOutlet, setHoveredOutlet] = useState<OutletFinancialData | null>(null);
+  const [metric, setMetric] = useState<Metric>('gross');
+  const [viewMode, setViewMode] = useState<ViewMode>('platform');
+  const [showAll, setShowAll] = useState(false);
 
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const tradingOutlets = useMemo(() => outlets.filter((o) => o.status === 'active'), [outlets]);
 
-  const tradingOutlets = outlets.filter(o => o.status === 'active');
+  const rows: Row[] = useMemo(() => {
+    const valueOf = (o: OutletFinancialData) => {
+      if (metric === 'gross') return o.grossSales;
+      if (metric === 'net') return o.netSales;
+      if (metric === 'netSc') return o.netSales + o.serviceCharge;
+      return o.netSales + o.serviceCharge + o.taxSst;
+    };
 
-  // Sort outlets high -> low based on chosen metric
-  const sortedOutlets = [...tradingOutlets].sort((a, b) => {
-    let valA = a.grossSales;
-    let valB = b.grossSales;
-    if (metric === 'net') {
-      valA = a.netSales;
-      valB = b.netSales;
-    } else if (metric === 'netSc') {
-      valA = a.netSales + a.serviceCharge;
-      valB = b.netSales + b.serviceCharge;
-    } else if (metric === 'netScTax') {
-      valA = a.netSales + a.serviceCharge + a.taxSst;
-      valB = b.netSales + b.serviceCharge + b.taxSst;
-    }
-    return valB - valA;
-  });
+    const platformOf = (o: OutletFinancialData): Record<PlatformKey, number> => {
+      const raw = metric === 'gross' ? o.platformGross : o.platformNet;
+      return {
+        Grab: raw.Grab || 0,
+        FoodPanda: raw.FoodPanda || 0,
+        Shopee: raw.Shopee || 0,
+        Apps: raw.Apps || 0,
+        POS: raw.POS || 0,
+      };
+    };
+
+    return [...tradingOutlets]
+      .sort((a, b) => valueOf(b) - valueOf(a))
+      .map((o) => {
+        const platforms = platformOf(o);
+        return {
+          id: o.id,
+          name: o.name,
+          total: valueOf(o),
+          ...platforms,
+        };
+      });
+  }, [tradingOutlets, metric]);
+
+  const visibleRows = showAll ? rows : rows.slice(0, INITIAL_ROWS);
 
   const getMetricTitle = () => {
     switch (metric) {
-      case 'gross': return 'Gross Sales per HQ outlet · Menu selling price · sorted high → low';
-      case 'net': return 'Net Sales per HQ outlet · Menu price – discount · sorted high → low';
-      case 'netSc': return 'Net + Service Charge per HQ outlet · + 10% service charge (dine-in) · sorted high → low';
-      case 'netScTax': return 'Net + SC + Tax per HQ outlet · + 6% SST · sorted high → low';
+      case 'gross':
+        return 'Gross Sales per HQ outlet · Menu selling price · sorted high → low';
+      case 'net':
+        return 'Net Sales per HQ outlet · Menu price – discount · sorted high → low';
+      case 'netSc':
+        return 'Net + Service Charge per HQ outlet · + 10% service charge (dine-in) · sorted high → low';
+      case 'netScTax':
+        return 'Net + SC + Tax per HQ outlet · + 6% SST · sorted high → low';
     }
   };
 
-  const maxVal = Math.max(...sortedOutlets.map(o => {
-    if (metric === 'gross') return o.grossSales;
-    if (metric === 'net') return o.netSales;
-    if (metric === 'netSc') return o.netSales + o.serviceCharge;
-    return o.netSales + o.serviceCharge + o.taxSst;
-  }), 220000);
+  const totalLabel =
+    metric === 'gross' ? 'Gross Sales' : metric === 'net' ? 'Net Sales' : 'Net + SC + Tax';
 
-  const handleScrollLeft = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -300, behavior: 'smooth' });
-    }
-  };
-
-  const handleScrollRight = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 300, behavior: 'smooth' });
-    }
+  const CustomTooltip = ({
+    active,
+    payload,
+  }: {
+    active?: boolean;
+    payload?: Array<{ payload: Row }>;
+  }) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const row = payload[0].payload;
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-xs shadow-xl">
+        <div className="mb-2 border-b pb-1.5 text-sm font-extrabold text-slate-900">{row.name}</div>
+        <div className="space-y-1 text-slate-600">
+          {viewMode === 'platform' ? (
+            PLATFORM_KEYS.map((key) => (
+              <div key={key} className="flex justify-between gap-4">
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full" style={{ background: PLATFORM_COLORS[key] }} />
+                  {key}
+                </span>
+                <span className="font-semibold tabular-nums text-slate-900">
+                  RM {row[key].toLocaleString()}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="flex justify-between gap-4">
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full" style={{ background: TOTAL_COLOR }} />
+                Total
+              </span>
+              <span className="font-semibold tabular-nums text-slate-900">
+                RM {row.total.toLocaleString()}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="mt-2 flex justify-between border-t border-slate-200 pt-1.5 font-extrabold text-slate-900">
+          <span>{totalLabel}</span>
+          <span className="tabular-nums">RM {row.total.toLocaleString()}</span>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-5 relative">
+    <div className="relative space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-6">
       {/* Header */}
       <div className="flex items-center gap-2.5">
-        <span className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white shadow-2xs">
           4
         </span>
         <div>
-          <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
-            Sales by Outlet
-          </h2>
-          <p className="text-xs text-slate-500">
-            Pick a metric and toggle the platform-stacked view
-          </p>
+          <h2 className="text-lg font-extrabold tracking-tight text-slate-900">Sales by Outlet</h2>
+          <p className="text-xs text-slate-500">Pick a metric and toggle the platform-stacked view</p>
         </div>
       </div>
 
       {/* Metric Tabs */}
-      <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto text-xs font-bold scrollbar-none">
-        <button
-          onClick={() => setMetric('gross')}
-          className={`px-4 py-1.5 rounded-lg transition-all ${
-            metric === 'gross' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Gross
-        </button>
-        <button
-          onClick={() => setMetric('net')}
-          className={`px-4 py-1.5 rounded-lg transition-all ${
-            metric === 'net' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Net
-        </button>
-        <button
-          onClick={() => setMetric('netSc')}
-          className={`px-4 py-1.5 rounded-lg transition-all ${
-            metric === 'netSc' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Net + SC
-        </button>
-        <button
-          onClick={() => setMetric('netScTax')}
-          className={`px-4 py-1.5 rounded-lg transition-all ${
-            metric === 'netScTax' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Net + SC + SST
-        </button>
+      <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 text-xs font-bold scrollbar-none">
+        {(
+          [
+            ['gross', 'Gross'],
+            ['net', 'Net'],
+            ['netSc', 'Net + SC'],
+            ['netScTax', 'Net + SC + SST'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setMetric(id)}
+            className={`shrink-0 rounded-lg px-4 py-1.5 transition-all focus-visible:ring-2 focus-visible:ring-slate-400 ${
+              metric === id ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* View Toggle: Total vs By platform */}
-      <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 w-fit text-xs font-bold">
-        <button
-          onClick={() => setViewMode('total')}
-          className={`px-3 py-1 rounded-lg transition-all ${
-            viewMode === 'total' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Total
-        </button>
-        <button
-          onClick={() => setViewMode('platform')}
-          className={`px-3 py-1 rounded-lg transition-all ${
-            viewMode === 'platform' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          By platform
-        </button>
+      {/* View Toggle */}
+      <div className="flex w-fit items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1 text-xs font-bold">
+        {(
+          [
+            ['total', 'Total'],
+            ['platform', 'By platform'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setViewMode(id)}
+            className={`rounded-lg px-3 py-1 transition-all focus-visible:ring-2 focus-visible:ring-slate-400 ${
+              viewMode === id ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Subtitle */}
-      <div className="text-xs font-bold text-slate-700">
-        {getMetricTitle()}
-      </div>
+      <div className="text-xs font-bold text-slate-700">{getMetricTitle()}</div>
 
-      {/* Horizontal Stacked Bar Chart Area */}
-      <div className="relative border border-slate-200 rounded-xl p-4 bg-slate-50/40">
-        
-        {/* Y Axis Reference lines */}
-        <div className="absolute left-4 right-4 top-10 pointer-events-none border-b border-dashed border-slate-300">
-          <span className="text-[10px] text-slate-400 font-semibold absolute -top-4 left-0">
-            {metric === 'gross' ? 'RM 220k' : metric === 'net' ? 'RM 160k' : 'RM 180k'}
-          </span>
-        </div>
-        <div className="absolute left-4 right-4 top-28 pointer-events-none border-b border-dashed border-slate-200">
-          <span className="text-[10px] text-slate-400 font-semibold absolute -top-4 left-0">
-            {metric === 'gross' ? 'RM 165k' : metric === 'net' ? 'RM 120k' : 'RM 135k'}
-          </span>
-        </div>
-        <div className="absolute left-4 right-4 top-44 pointer-events-none border-b border-dashed border-slate-200">
-          <span className="text-[10px] text-slate-400 font-semibold absolute -top-4 left-0">
-            {metric === 'gross' ? 'RM 110k' : metric === 'net' ? 'RM 80k' : 'RM 90k'}
-          </span>
-        </div>
-        <div className="absolute left-4 right-4 top-60 pointer-events-none border-b border-dashed border-slate-200">
-          <span className="text-[10px] text-slate-400 font-semibold absolute -top-4 left-0">
-            {metric === 'gross' ? 'RM 55k' : metric === 'net' ? 'RM 40k' : 'RM 45k'}
-          </span>
-        </div>
-
-        {/* Scrollable Container */}
-        <div 
-          ref={scrollContainerRef}
-          className="overflow-x-auto pt-8 pb-16 scrollbar-none relative"
-        >
-          <div className="flex items-end gap-3 min-w-max h-64 pl-12 pr-6">
-            {sortedOutlets.map(outlet => {
-              let displayVal = outlet.grossSales;
-              if (metric === 'net') displayVal = outlet.netSales;
-              if (metric === 'netSc') displayVal = outlet.netSales + outlet.serviceCharge;
-              if (metric === 'netScTax') displayVal = outlet.netSales + outlet.serviceCharge + outlet.taxSst;
-
-              const heightPct = Math.min(Math.round((displayVal / maxVal) * 100), 98);
-
-              // Platform proportions
-              const netMap = metric === 'gross' ? outlet.platformGross : outlet.platformNet;
-              const grabH = Math.round(((netMap.Grab || 0) / (displayVal || 1)) * 100);
-              const fpH = Math.round(((netMap.FoodPanda || 0) / (displayVal || 1)) * 100);
-              const shopeeH = Math.round(((netMap.Shopee || 0) / (displayVal || 1)) * 100);
-              const appsH = Math.round(((netMap.Apps || 0) / (displayVal || 1)) * 100);
-              const posH = 100 - (grabH + fpH + shopeeH + appsH);
-
-              const isHovered = hoveredOutlet?.id === outlet.id;
-
-              return (
-                <div
-                  key={outlet.id}
-                  className="flex flex-col items-center group cursor-pointer relative"
-                  onMouseEnter={() => setHoveredOutlet(outlet)}
-                  onMouseLeave={() => setHoveredOutlet(null)}
-                >
-                  {/* The Bar */}
-                  <div 
-                    className={`w-7 sm:w-8 rounded-t-sm flex flex-col justify-end overflow-hidden transition-all duration-200 ${
-                      isHovered ? 'ring-2 ring-slate-900 ring-offset-1 brightness-110' : ''
-                    }`}
-                    style={{ height: `${heightPct * 2.2}px` }}
-                  >
-                    {viewMode === 'total' ? (
-                      <div className="w-full h-full bg-indigo-600 rounded-t-sm"></div>
-                    ) : (
-                      <>
-                        {/* POS (slate top) */}
-                        <div style={{ height: `${Math.max(posH, 6)}%` }} className="bg-slate-600" title="POS"></div>
-                        {/* Apps (indigo) */}
-                        <div style={{ height: `${Math.max(appsH, 5)}%` }} className="bg-indigo-500" title="Apps"></div>
-                        {/* Shopee (orange) */}
-                        <div style={{ height: `${Math.max(shopeeH, 12)}%` }} className="bg-orange-500" title="Shopee"></div>
-                        {/* FoodPanda (pink) */}
-                        <div style={{ height: `${Math.max(fpH, 12)}%` }} className="bg-pink-500" title="FoodPanda"></div>
-                        {/* Grab (green bottom) */}
-                        <div style={{ height: `${Math.max(grabH, 20)}%` }} className="bg-emerald-500" title="Grab"></div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Outlet Label (rotated 45deg) */}
-                  <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 w-28 text-[11px] font-bold text-slate-600 whitespace-nowrap -rotate-45 origin-top-left pointer-events-none group-hover:text-rose-600">
-                    {outlet.name}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {/* Ranked horizontal bar list */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:p-4">
+        <div style={{ width: '100%', height: visibleRows.length * 30 + 40 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              layout="vertical"
+              data={visibleRows}
+              margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
+              barCategoryGap="20%"
+            >
+              <CartesianGrid horizontal={false} stroke="#E2E8F0" />
+              <XAxis
+                type="number"
+                tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
+                tick={{ fontSize: 10, fill: '#64748B' }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={150}
+                tick={{ fontSize: 11, fill: '#334155', fontWeight: 600 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F1F5F9' }} />
+              <Legend
+                wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                formatter={(value: string) => <span className="text-slate-600">{value}</span>}
+              />
+              {viewMode === 'total' ? (
+                <Bar dataKey="total" name={totalLabel} fill={TOTAL_COLOR} radius={[0, 3, 3, 0]} />
+              ) : (
+                PLATFORM_KEYS.map((key) => (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    name={key}
+                    stackId="platform"
+                    fill={PLATFORM_COLORS[key]}
+                    radius={key === PLATFORM_KEYS[PLATFORM_KEYS.length - 1] ? [0, 3, 3, 0] : undefined}
+                  />
+                ))
+              )}
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
-        {/* Hover Tooltip Overlay (matching screenshots tooltip) */}
-        {hoveredOutlet && (
-          <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 bg-white p-3.5 rounded-xl shadow-xl border border-slate-200 text-xs w-64 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
-            <div className="font-extrabold text-slate-900 text-sm border-b pb-1.5 mb-2">
-              {hoveredOutlet.name}
-            </div>
-            <div className="space-y-1 text-slate-600">
-              <div className="flex justify-between">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-slate-600"></span> POS
-                </span>
-                <span className="font-semibold text-slate-900">
-                  RM {(metric === 'gross' ? hoveredOutlet.platformGross.POS : hoveredOutlet.platformNet.POS).toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span> Apps
-                </span>
-                <span className="font-semibold text-slate-900">
-                  RM {(metric === 'gross' ? hoveredOutlet.platformGross.Apps : hoveredOutlet.platformNet.Apps).toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-orange-500"></span> Shopee
-                </span>
-                <span className="font-semibold text-slate-900">
-                  RM {(metric === 'gross' ? hoveredOutlet.platformGross.Shopee : hoveredOutlet.platformNet.Shopee).toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-pink-500"></span> FoodPanda
-                </span>
-                <span className="font-semibold text-slate-900">
-                  RM {(metric === 'gross' ? hoveredOutlet.platformGross.FoodPanda : hoveredOutlet.platformNet.FoodPanda).toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Grab
-                </span>
-                <span className="font-semibold text-slate-900">
-                  RM {(metric === 'gross' ? hoveredOutlet.platformGross.Grab : hoveredOutlet.platformNet.Grab).toLocaleString()}
-                </span>
-              </div>
-            </div>
-
-            <div className="border-t border-slate-200 mt-2 pt-1.5 flex justify-between font-extrabold text-slate-900 text-xs">
-              <span>{metric === 'gross' ? 'Gross Sales' : metric === 'net' ? 'Net Sales' : 'Net + SC + Tax'}</span>
-              <span>
-                RM {(metric === 'gross' ? hoveredOutlet.grossSales : metric === 'net' ? hoveredOutlet.netSales : hoveredOutlet.netSales + hoveredOutlet.serviceCharge + hoveredOutlet.taxSst).toLocaleString()}
-              </span>
-            </div>
+        {/* Expand toggle */}
+        {rows.length > INITIAL_ROWS && (
+          <div className="mt-3 flex justify-center border-t border-slate-200 pt-3">
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              aria-expanded={showAll}
+              className="rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-400"
+            >
+              {showAll ? 'Show top 12' : `Show all ${rows.length}`}
+            </button>
           </div>
         )}
-
-        {/* Scroll Bar Controls */}
-        <div className="mt-8 pt-3 border-t border-slate-200 flex items-center justify-between">
-          <button
-            onClick={handleScrollLeft}
-            className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-[11px] text-slate-500 font-semibold">
-            ← scroll horizontally to see all 44 outlets →
-          </span>
-          <button
-            onClick={handleScrollRight}
-            className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-
       </div>
     </div>
   );

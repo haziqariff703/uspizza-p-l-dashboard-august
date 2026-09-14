@@ -1,13 +1,5 @@
 import React from 'react';
-import { 
-  CheckCircle2, 
-  Clock, 
-  AlertTriangle, 
-  TrendingUp, 
-  Users, 
-  Activity,
-  Zap
-} from 'lucide-react';
+import { WarningTriangle as AlertTriangle } from 'iconoir-react';
 import { UserTask, ActivityEvent } from '../../types';
 
 interface TaskSummaryBarProps {
@@ -52,9 +44,6 @@ export const TaskSummaryBar: React.FC<TaskSummaryBarProps> = ({
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Monthly Closing
             </span>
-            <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-slate-900">
@@ -79,9 +68,6 @@ export const TaskSummaryBar: React.FC<TaskSummaryBarProps> = ({
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Active In Flight
             </span>
-            <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
-              <Clock className="w-4 h-4" />
-            </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-slate-900">
@@ -92,7 +78,7 @@ export const TaskSummaryBar: React.FC<TaskSummaryBarProps> = ({
             </span>
           </div>
           <div className="mt-2.5 text-xs text-slate-600 flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+            <span className="inline-block w-2 h-2 rounded-full bg-sky-500"></span>
             <span>{inProgressTasks} In Progress</span>
             <span className="inline-block w-2 h-2 rounded-full bg-amber-500 ml-1"></span>
             <span>{inReviewTasks} Review</span>
@@ -105,19 +91,16 @@ export const TaskSummaryBar: React.FC<TaskSummaryBarProps> = ({
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Checklist Steps
             </span>
-            <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
-              <TrendingUp className="w-4 h-4" />
-            </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-indigo-700">
+            <span className="text-2xl sm:text-3xl font-extrabold text-sky-700">
               {subtaskProgress}%
             </span>
             <span className="text-xs font-semibold text-slate-500">
               ({completedSubtasks}/{allSubtasks.length} steps)
             </span>
           </div>
-          <div className="mt-2.5 text-xs text-indigo-950 font-medium">
+          <div className="mt-2.5 text-xs text-slate-600 font-medium">
             Step-level verification velocity
           </div>
         </div>
@@ -132,9 +115,6 @@ export const TaskSummaryBar: React.FC<TaskSummaryBarProps> = ({
             <span className="text-xs font-bold uppercase tracking-wider text-rose-700">
               Flagged Items
             </span>
-            <div className="p-1.5 rounded-lg bg-rose-100 text-rose-700">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-rose-700">
