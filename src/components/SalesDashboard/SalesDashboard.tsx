@@ -21,6 +21,8 @@ interface SalesDashboardProps {
   /** Outlet code the navbar search jumped to (P&L by Outlet only). */
   selectedOutletCode?: string | null;
   onSelectOutlet?: (code: string) => void;
+  /** Lets the overview's entity cards scope the dashboard. */
+  onEntityFilterChange?: (filter: 'all' | 'myUsPizza' | 'sabah') => void;
 }
 
 export const SalesDashboard: React.FC<SalesDashboardProps> = ({
@@ -31,6 +33,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
   onGoToTasks,
   selectedOutletCode,
   onSelectOutlet,
+  onEntityFilterChange,
 }) => {
   const [exportNotice, setExportNotice] = useState(false);
 
@@ -81,7 +84,13 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
       )}
 
       {/* Section Views */}
-      {section === 'overview' && <OverviewSection entityFilter={entityFilter} channelFilter={channelFilter} />}
+      {section === 'overview' && (
+        <OverviewSection
+          entityFilter={entityFilter}
+          channelFilter={channelFilter}
+          onEntityFilterChange={onEntityFilterChange}
+        />
+      )}
       {section === 'fees' && <CommissionFeesSection channelFilter={channelFilter} />}
       {section === 'coverage' && <DataCoverageSection outlets={outlets} onGoToTasks={onGoToTasks} />}
       {section === 'salesByOutlet' && <SalesByOutletSection outlets={outlets} />}

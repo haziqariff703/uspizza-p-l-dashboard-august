@@ -1,15 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { ENTITY_TOTALS, PL_BY_OUTLET, PLATFORM_DETAIL_BY_OUTLET } from '../../data/outletData';
+import { PLATFORM_BRAND as PLATFORM_COLORS } from '../../platformColors';
 
 const money = (value: number) => `RM ${Math.abs(value).toLocaleString()}`;
-
-const PLATFORM_COLORS: Record<string, string> = {
-  Grab: '#00B14F',
-  FoodPanda: '#D70F64',
-  Shopee: '#EE4D2D',
-  Apps: '#6366F1', // real original color — see docs/original-capture.html
-  POS: '#64748B',
-};
 
 const marginColor = (pct: number) => (pct >= 60 ? '#16a34a' : '#65a30d');
 

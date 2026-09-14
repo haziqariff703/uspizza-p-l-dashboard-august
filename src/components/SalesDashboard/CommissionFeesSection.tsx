@@ -10,10 +10,19 @@ import { SectionHeading } from './SectionHeading';
 import { ChannelFilter } from '../../types';
 import { PlatformLogo } from '../common/PlatformLogo';
 import { copy } from '../../copy';
+import { FEE_TYPE_COLORS, PLATFORM_BRAND } from '../../platformColors';
 
 interface CommissionFeesSectionProps {
   channelFilter: ChannelFilter;
 }
+
+const FEE_COMPOSITION: { key: 'commission' | 'advertising' | 'platformFees' | 'paymentGateway' | 'adjustments'; label: string }[] = [
+  { key: 'commission', label: 'Commission' },
+  { key: 'advertising', label: 'Advertising' },
+  { key: 'platformFees', label: 'Platform / service fees' },
+  { key: 'paymentGateway', label: 'Payment gateway' },
+  { key: 'adjustments', label: 'Adjustments / credits' },
+];
 
 const money = (n: number) => `RM ${Math.abs(n).toLocaleString()}`;
 
@@ -278,6 +287,62 @@ export const CommissionFeesSection: React.FC<CommissionFeesSectionProps> = ({ ch
               </tr>
             </tfoot>
           </table>
+        </div>
+      </div>
+
+      {/* Fee composition per platform — what each platform's total is made of */}
+      <div>
+        <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-700">Fee composition per platform</h4>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {FEE_PLATFORMS.map((platform) => {
+            const fees = platforms[platform];
+            const segments = FEE_COMPOSITION.map((row) => ({
+              ...row,
+              value: Math.abs(fees[row.key] as number),
+            })).filter((seg) => seg.value > 0);
+            const segmentTotal = segments.reduce((sum, seg) => sum + seg.value, 0);
+
+            return (
+              <article key={platform} className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                <div className="mb-1.5 flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 font-semibold text-slate-700">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ background: PLATFORM_BRAND[platform] }}
+                      aria-hidden="true"
+                    />
+                    {platform}
+                  </span>
+                  <span className="tabular-nums text-slate-500">{money(fees.totalFees)} fees</span>
+                </div>
+                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  {segments.map((seg) => (
+                    <div
+                      key={seg.key}
+                      style={{
+                        width: `${(seg.value / segmentTotal) * 100}%`,
+                        background: FEE_TYPE_COLORS[seg.key],
+                      }}
+                      title={`${seg.label}: ${money(seg.value)}`}
+                    />
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+          {FEE_COMPOSITION.map((row) => (
+            <span key={row.key} className="flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-sm"
+                style={{ background: FEE_TYPE_COLORS[row.key] }}
+                aria-hidden="true"
+              />
+              {row.label}
+            </span>
+          ))}
         </div>
       </div>
 

@@ -525,6 +525,7 @@ export default function App() {
             onGoToTasks={() => setCurrentTab('tasks')}
             selectedOutletCode={selectedOutletCode}
             onSelectOutlet={setSelectedOutletCode}
+            onEntityFilterChange={setEntityFilter}
           />
         )}
 

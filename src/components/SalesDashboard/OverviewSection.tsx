@@ -1,220 +1,147 @@
-import React, { useState } from 'react';
-import { NavArrowDown as ChevronDown } from 'iconoir-react';
-import { COMMISSION_FEES_SUMMARY, ENTITY_TOTALS, PLATFORM_SETTLEMENTS } from '../../data/outletData';
+import React from 'react';
+import { ENTITY_TOTALS } from '../../data/outletData';
 import { PlatformPanel } from './PlatformPanel';
 import { SectionHeading } from './SectionHeading';
 import { ChannelFilter } from '../../types';
-import { copy } from '../../copy';
+import { BASIS_COLORS } from '../../platformColors';
 
 interface OverviewSectionProps {
   entityFilter: 'all' | 'myUsPizza' | 'sabah';
   channelFilter: ChannelFilter;
+  onEntityFilterChange?: (filter: 'all' | 'myUsPizza' | 'sabah') => void;
 }
 
 const money = (value: number) => `RM ${Math.abs(value).toLocaleString()}`;
 
-interface CalcLine {
-  label: string;
-  value: string;
-  tone?: 'negative' | 'total';
-}
-
-interface Kpi {
-  key: string;
-  label: string;
-  value: string;
-  note: string;
-  accent: string;
-  badge?: string;
-  calc: CalcLine[];
-  caveat?: string;
-}
-
-export const OverviewSection: React.FC<OverviewSectionProps> = ({ entityFilter, channelFilter }) => {
-  const [openKpi, setOpenKpi] = useState<string | null>(null);
+/**
+ * Section 1 — mirrors the original capture: entity split, the four sales
+ * bases with their derivation, purchases/profit/margin, then per-platform
+ * net settlement.
+ */
+export const OverviewSection: React.FC<OverviewSectionProps> = ({
+  entityFilter,
+  channelFilter,
+  onEntityFilterChange,
+}) => {
   const totals = ENTITY_TOTALS[entityFilter];
-  const discounts = totals.grossSales - totals.netSales;
-  const purchasesPct = ((totals.purchases / totals.netSales) * 100).toFixed(1);
-
-  // Platform settlement data exists at group level
+  const group = ENTITY_TOTALS.all;
   const isGroupScope = entityFilter === 'all';
-  const expectedSettlement = PLATFORM_SETTLEMENTS.reduce((sum, p) => sum + p.netSettlement, 0);
-  const settlementDeductions = ENTITY_TOTALS.all.netSales - expectedSettlement;
 
-  const kpis: Kpi[] = [
-    {
-      key: 'net-sales',
-      label: 'Net Sales',
-      value: money(totals.netSales),
-      note: copy.overviewNetSalesNote,
-      accent: '#C8102E', // US Pizza Brand Red
-      calc: [
-        { label: 'Gross sales (menu price)', value: money(totals.grossSales) },
-        { label: 'Less: customer discounts', value: `− ${money(discounts)}`, tone: 'negative' },
-        { label: 'Net sales (reconciled)', value: money(totals.netSales), tone: 'total' },
-      ],
-    },
-    {
-      key: 'purchases',
-      label: 'Total Purchases (GRN)',
-      value: money(totals.purchases),
-      note: `${purchasesPct}% of net sales · Goods Received Notes`,
-      accent: '#0284C7', // Sky blue for inventory/GRN
-      calc: [
-        { label: 'Goods received (GRN confirmed)', value: money(totals.purchases) },
-        { label: 'Net sales', value: money(totals.netSales) },
-        { label: 'Purchases ÷ net sales ratio', value: `${purchasesPct}%`, tone: 'total' },
-      ],
-      caveat: copy.overviewPurchasesCaveat,
-    },
-    {
-      key: 'gross-profit',
-      label: 'Gross Profit (Provisional)',
-      value: money(totals.grossProfit),
-      note: 'Sales less inventory purchases',
-      accent: '#047857', // Emerald for gross profit
-      badge: `${totals.grossMargin}% margin`,
-      calc: [
-        { label: 'Net sales', value: money(totals.netSales) },
-        { label: 'Less: purchases (GRN)', value: `− ${money(totals.purchases)}`, tone: 'negative' },
-        { label: 'Provisional gross profit', value: money(totals.grossProfit), tone: 'total' },
-      ],
-      caveat: copy.overviewGrossProfitCaveat,
-    },
-    {
-      key: 'expected-settlement',
-      label: 'Expected Bank Settlement',
-      value: isGroupScope ? money(expectedSettlement) : '—',
-      note: isGroupScope ? 'Sum of platform net settlements' : 'Not split by entity',
-      accent: '#D97706', // Warm Amber
-      calc: isGroupScope
-        ? [
-            { label: 'Net sales', value: money(ENTITY_TOTALS.all.netSales) },
-            {
-              label: 'Less: platform deductions',
-              value: `− ${money(settlementDeductions)}`,
-              tone: 'negative',
-            },
-            { label: 'Expected bank payout', value: money(expectedSettlement), tone: 'total' },
-          ]
-        : [],
-      caveat: isGroupScope
-        ? `Expected cash payout. The ${money(
-            settlementDeductions
-          )} total deduction was previously mislabelled "commission" — actual commission is ${money(
-            COMMISSION_FEES_SUMMARY.commissionMonth
-          )} (see section 2).`
-        : 'Platform settlement statements are grouped at the consolidated company level.',
-    },
+  // Only the group scope carries SC / SST / commission splits.
+  const netPlusSc = isGroupScope ? group.netPlusSc : null;
+  const netPlusScTax = isGroupScope ? group.netPlusScTax : null;
+  const discount = totals.grossSales - totals.netSales;
+
+  const bases = [
+    { key: 'gross', label: 'Gross Sales', value: totals.grossSales, note: 'Menu selling price', color: BASIS_COLORS.gross },
+    { key: 'net', label: 'Net Sales', value: totals.netSales, note: 'Menu price − discount', color: BASIS_COLORS.net },
+    { key: 'netSc', label: 'Net + Service Charge', value: netPlusSc, note: '+ 10% service charge (dine-in)', color: BASIS_COLORS.netSc },
+    { key: 'netScTax', label: 'Net + SC + Tax', value: netPlusScTax, note: '+ 6% SST', color: BASIS_COLORS.netScTax },
   ];
 
-  const outletScope =
-    entityFilter === 'sabah' ? '2 Sabah' : entityFilter === 'myUsPizza' ? '42 MY US Pizza' : '44 trading';
+  const entities = [
+    { id: 'myUsPizza' as const, legal: 'MY US PIZZA SDN BHD', totals: ENTITY_TOTALS.myUsPizza },
+    { id: 'sabah' as const, legal: 'MY US PIZZA (SABAH) SDN BHD', totals: ENTITY_TOTALS.sabah },
+  ];
+
+  const scopeLabel =
+    entityFilter === 'sabah' ? '2 Sabah' : entityFilter === 'myUsPizza' ? '42 MY US Pizza' : 'all 46 corporate';
 
   return (
     <div className="space-y-5">
       <SectionHeading
         number={1}
-        title="Executive Overview"
-        subtitle={`${copy.overviewSubtitlePrefix} · ${outletScope} outlets`}
+        title="Overview"
+        subtitle={`Sales by metric · ${scopeLabel} outlets · May 2026`}
       />
 
-      {/* AI Explanation & Status Banner */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                  {copy.overviewAutoSummary}
-                </h4>
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-600">
-                  {copy.overviewAutoGenerated}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                May 2026 net sales reached <strong className="text-slate-900">{money(totals.netSales)}</strong> across {outletScope} outlets at a <strong className="text-emerald-700">{totals.grossMargin}%</strong> provisional gross margin, with <strong className="text-slate-900">{money(expectedSettlement)}</strong> expected in bank receipts.
-                <span className="text-amber-800 font-medium"> {copy.overviewGapNote}</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2 sm:border-l sm:border-slate-100 sm:pl-4">
-            <div className="text-right">
-              <span className="block text-[11px] uppercase font-bold text-slate-500">{copy.overviewReconLabel}</span>
-              <span className="text-xs font-bold text-emerald-700">{copy.overviewReconState}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 4 Core KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => {
-          const isOpen = openKpi === kpi.key;
-          const canOpen = kpi.calc.length > 0;
+      {/* Entity split — click to scope the whole dashboard */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {entities.map((entity) => {
+          const isActive = entityFilter === entity.id;
           return (
-            <article
-              key={kpi.key}
-              className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:shadow-sm"
+            <button
+              key={entity.id}
+              type="button"
+              onClick={() => onEntityFilterChange?.(isActive ? 'all' : entity.id)}
+              aria-pressed={isActive}
+              className={`rounded-2xl border bg-white p-5 text-left shadow-xs transition hover:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-400 ${
+                isActive ? 'border-[#C8102E] ring-1 ring-[#C8102E]/20' : 'border-slate-200'
+              }`}
             >
-              <span className="absolute inset-x-0 top-0 h-1" style={{ background: kpi.accent }} />
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{kpi.label}</p>
-                {kpi.badge && (
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                    {kpi.badge}
-                  </span>
-                )}
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{entity.legal}</div>
+              <div className="mt-1 flex items-end justify-between gap-3">
+                <div className="text-2xl font-bold tabular-nums text-slate-900">{money(entity.totals.netSales)}</div>
+                <div className="text-sm text-slate-400">{entity.totals.outletsCount} outlets · net sales</div>
               </div>
-              <p className="mt-2 text-2xl font-black tracking-tight tabular-nums text-slate-900">{kpi.value}</p>
-              <p className="mt-1 text-xs text-slate-500">{kpi.note}</p>
-
-              {canOpen && (
-                <button
-                  type="button"
-                  onClick={() => setOpenKpi(isOpen ? null : kpi.key)}
-                  aria-expanded={isOpen}
-                  className="mt-3.5 flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 transition-colors hover:bg-slate-100"
-                >
-                  <span>{isOpen ? copy.overviewHideCalc : copy.overviewViewCalc}</span>
-                  <ChevronDown className={`h-3.5 w-3.5 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                </button>
-              )}
-
-              {isOpen && (
-                <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-xs animate-in fade-in duration-150">
-                  {kpi.calc.map((line) => (
-                    <div
-                      key={line.label}
-                      className={`flex justify-between gap-3 ${
-                        line.tone === 'total' ? 'border-t border-slate-200 pt-1.5 font-bold text-slate-900' : ''
-                      }`}
-                    >
-                      <dt className={line.tone === 'total' ? 'text-slate-900' : 'text-slate-500'}>{line.label}</dt>
-                      <dd
-                        className={`tabular-nums font-semibold ${
-                          line.tone === 'negative' ? 'text-rose-600' : 'text-slate-900'
-                        }`}
-                      >
-                        {line.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-
-              {kpi.caveat && (
-                <div className="mt-3 text-[11px] leading-4 text-slate-500 border-t border-slate-50 pt-2">
-                  <span>{kpi.caveat}</span>
-                </div>
-              )}
-            </article>
+            </button>
           );
         })}
       </div>
 
-      {/* Platform Breakdown Panel */}
+      {/* The four sales bases */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {bases.map((basis) => (
+          <article
+            key={basis.key}
+            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-xs"
+          >
+            <span className="absolute inset-x-0 top-0 h-1.5" style={{ background: basis.color }} aria-hidden="true" />
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{basis.label}</div>
+            <div className="mt-2 text-2xl font-extrabold tracking-tight tabular-nums text-slate-900">
+              {basis.value === null ? '—' : money(basis.value)}
+            </div>
+            <div className="mt-1 text-xs text-slate-400">
+              {basis.value === null ? 'Group scope only' : basis.note}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {/* Derivation strip: gross → collected */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-xs">
+        <span className="font-semibold tabular-nums text-slate-800">{money(totals.grossSales)}</span> gross
+        <span className="text-rose-500 tabular-nums">− {money(discount)} discount</span>
+        <span className="text-slate-300" aria-hidden="true">=</span>
+        <span className="font-semibold tabular-nums text-slate-800">{money(totals.netSales)}</span> net
+        {isGroupScope && (
+          <>
+            <span className="text-sky-500 tabular-nums">+ {money(group.serviceCharge)} SC</span>
+            <span className="text-teal-500 tabular-nums">+ {money(group.taxSst)} SST</span>
+            <span className="text-slate-300" aria-hidden="true">=</span>
+            <span className="font-semibold tabular-nums text-slate-800">{money(group.netPlusScTax)}</span> collected
+          </>
+        )}
+      </div>
+
+      {/* Purchases → profit → margin → net after commission */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Purchases</div>
+          <div className="mt-1.5 text-xl font-bold tabular-nums text-slate-900">{money(totals.purchases)}</div>
+          <div className="mt-0.5 text-xs text-slate-400">GRN received</div>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross Profit</div>
+          <div className="mt-1.5 text-xl font-bold tabular-nums text-emerald-600">{money(totals.grossProfit)}</div>
+          <div className="mt-0.5 text-xs text-slate-400">Net − Purchases</div>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross Margin</div>
+          <div className="mt-1.5 text-xl font-bold tabular-nums text-emerald-600">{totals.grossMargin}%</div>
+          <div className="mt-0.5 text-xs text-slate-400">of net sales</div>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Net after Commission</div>
+          <div className="mt-1.5 text-xl font-bold tabular-nums text-slate-900">
+            {isGroupScope ? money(group.netAfterCommission) : '—'}
+          </div>
+          <div className="mt-0.5 text-xs text-slate-400">
+            {isGroupScope ? `less ${money(group.commissionLess)} comm.` : 'Group scope only'}
+          </div>
+        </article>
+      </div>
+
       <PlatformPanel channelFilter={channelFilter} />
     </div>
   );

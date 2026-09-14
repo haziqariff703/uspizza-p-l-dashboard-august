@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { OutletFinancialData } from '../../types';
+import { PLATFORM_BRAND } from '../../platformColors';
 
 interface SalesByOutletSectionProps {
   outlets: OutletFinancialData[];
@@ -21,14 +22,7 @@ type ViewMode = 'total' | 'platform';
 const PLATFORM_KEYS = ['Grab', 'FoodPanda', 'Shopee', 'Apps', 'POS'] as const;
 type PlatformKey = (typeof PLATFORM_KEYS)[number];
 
-// Official brand hexes from DESIGN.md
-const PLATFORM_COLORS: Record<PlatformKey, string> = {
-  Grab: '#00B14F',
-  FoodPanda: '#D70F64',
-  Shopee: '#EE4D2D',
-  Apps: '#C8102E',
-  POS: '#334155',
-};
+const PLATFORM_COLORS = PLATFORM_BRAND as Record<PlatformKey, string>;
 
 const TOTAL_COLOR = '#0B192C';
 

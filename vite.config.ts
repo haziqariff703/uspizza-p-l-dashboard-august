@@ -6,6 +6,16 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      rollupOptions: {
+        input: {
+          // The React dashboard is the site root.
+          main: path.resolve(__dirname, 'index.html'),
+          // Captured original kept servable for reference at /original.html.
+          original: path.resolve(__dirname, 'original.html'),
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

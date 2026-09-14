@@ -153,6 +153,45 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
         </div>
       )}
 
+      {/* Per-channel report status — the original's top-line coverage strip */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {(['POS', 'Grab', 'FoodPanda', 'Shopee', 'Web'] as const).map((channel) => {
+          const missing = trading.filter((o) => o.channelStatus[channel] === 'pending').length;
+          const isComplete = missing === 0;
+          return (
+            <div
+              key={channel}
+              className={`rounded-xl border p-3 ${
+                isComplete ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <PlatformLogo platform={channel === 'Web' ? 'Apps' : channel} size="xs" />
+                <span className="text-sm font-semibold text-slate-700">{channel}</span>
+              </div>
+              <div className={`mt-1 text-lg font-bold ${isComplete ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {isComplete ? '✓ complete' : `${missing} missing`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {(() => {
+        const incomplete = trading.filter((o) =>
+          Object.values(o.channelStatus).some((s) => s === 'pending')
+        ).length;
+        return incomplete === 0 ? (
+          <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-700">
+            ✓ All {trading.length} trading outlets have complete reports across every channel for May 2026.
+          </div>
+        ) : (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+            {incomplete} of {trading.length} trading outlets still have a channel report outstanding for May 2026.
+          </div>
+        );
+      })()}
+
       {/* Channel Summary Card Grid */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-3">
@@ -627,6 +666,12 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
               <dt className="font-bold text-slate-800">Goods Received Notes (GRN)</dt>
               <dd className="mt-0.5 text-slate-500">
                 {copy.coverageGrnNote}
+              </dd>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+              <dt className="font-bold text-slate-800">Web (app) sales source</dt>
+              <dd className="mt-0.5 text-slate-500">
+                May 2026 web orders come from <span className="font-medium text-slate-700">WEB ORDER 1-31MAY.csv</span>.
               </dd>
             </div>
           </dl>
