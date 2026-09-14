@@ -23,7 +23,7 @@ const SECTION_OPTIONS: { id: DashboardSection; number: number; label: string; de
   { id: 'coverage', number: 3, label: 'Data Coverage', description: copy.navDescCoverage },
   { id: 'salesByOutlet', number: 4, label: 'Sales by Outlet', description: copy.navDescSalesByOutlet },
   { id: 'purchasesByOutlet', number: 5, label: 'Purchases by Outlet', description: copy.navDescPurchasesByOutlet },
-  { id: 'grossSalesByOutlet', number: 6, label: 'Gross Sales by Outlet', description: copy.navDescGrossSalesByOutlet },
+  { id: 'purchasesToNetSales', number: 6, label: 'Purchases-to-Net Sales', description: 'GRN purchases as a share of net sales' },
   { id: 'plByOutlet', number: 7, label: 'P&L by Outlet', description: copy.navDescPLByOutlet },
 ];
 
