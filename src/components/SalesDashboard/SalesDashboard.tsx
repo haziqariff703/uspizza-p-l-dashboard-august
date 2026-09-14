@@ -3,6 +3,10 @@ import { Calendar as CalendarDays, CheckCircle as CheckCircle2, Download, Page a
 import { OverviewSection } from './OverviewSection';
 import { CommissionFeesSection } from './CommissionFeesSection';
 import { DataCoverageSection } from './DataCoverageSection';
+import { SalesByOutletSection } from './SalesByOutletSection';
+import { PurchasesByOutletSection } from './PurchasesByOutletSection';
+import { GrossSalesByOutletSection } from './GrossSalesByOutletSection';
+import { PLByOutletSection } from './PLByOutletSection';
 import { ChannelFilter, DashboardSection, OutletFinancialData } from '../../types';
 import { copy } from '../../copy';
 
@@ -14,6 +18,9 @@ interface SalesDashboardProps {
   section: DashboardSection;
   outlets: OutletFinancialData[];
   onGoToTasks: () => void;
+  /** Outlet code the navbar search jumped to (P&L by Outlet only). */
+  selectedOutletCode?: string | null;
+  onSelectOutlet?: (code: string) => void;
 }
 
 export const SalesDashboard: React.FC<SalesDashboardProps> = ({
@@ -22,6 +29,8 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
   section,
   outlets,
   onGoToTasks,
+  selectedOutletCode,
+  onSelectOutlet,
 }) => {
   const [exportNotice, setExportNotice] = useState(false);
 
@@ -75,6 +84,12 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
       {section === 'overview' && <OverviewSection entityFilter={entityFilter} channelFilter={channelFilter} />}
       {section === 'fees' && <CommissionFeesSection channelFilter={channelFilter} />}
       {section === 'coverage' && <DataCoverageSection outlets={outlets} onGoToTasks={onGoToTasks} />}
+      {section === 'salesByOutlet' && <SalesByOutletSection outlets={outlets} />}
+      {section === 'purchasesByOutlet' && <PurchasesByOutletSection />}
+      {section === 'grossSalesByOutlet' && <GrossSalesByOutletSection />}
+      {section === 'plByOutlet' && (
+        <PLByOutletSection selectedCode={selectedOutletCode} onSelectOutlet={onSelectOutlet} />
+      )}
     </div>
   );
 };

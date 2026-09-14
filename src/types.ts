@@ -7,7 +7,30 @@ export type ChannelType = 'POS' | 'Grab' | 'FoodPanda' | 'Shopee' | 'Web' | 'All
 export type ChannelFilter = 'All' | 'Grab' | 'FoodPanda' | 'Shopee' | 'Apps' | 'POS';
 
 /** Each dashboard section is its own page, picked from the navbar dropdown. */
-export type DashboardSection = 'overview' | 'fees' | 'coverage';
+export type DashboardSection =
+  | 'overview'
+  | 'fees'
+  | 'coverage'
+  | 'salesByOutlet'
+  | 'purchasesByOutlet'
+  | 'grossSalesByOutlet'
+  | 'plByOutlet';
+
+/**
+ * One row of the real per-outlet P&L, sourced from docs/original-capture.html
+ * (the actual captured original at `/`). Deliberately smaller than
+ * OutletFinancialData — only the fields verified from that capture, for all
+ * 44 outlets, vs. INITIAL_OUTLETS' fuller shape which only covers 21.
+ */
+export interface PLOutletRow {
+  name: string;
+  code: string;
+  entity: 'MY US PIZZA' | 'Sabah';
+  netSales: number;
+  purchases: number;
+  grossProfit: number;
+  marginPct: number;
+}
 
 /**
  * Report state per outlet/channel. "Received" deliberately does not mean
