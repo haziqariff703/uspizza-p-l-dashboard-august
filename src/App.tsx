@@ -560,7 +560,7 @@ export default function App() {
               <span>·</span>
               <span>Corporate Outlets Operations & Audit Hub</span>
               <span>·</span>
-              <span>Period: May 2026</span>
+              <span>Period: selected reporting month</span>
             </div>
             <div className="text-[11px] text-slate-400">
               Real-Time Engine Active · 44 Corporate Outlets · MY US PIZZA & Sabah Entities

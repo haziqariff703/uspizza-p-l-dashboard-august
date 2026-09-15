@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Calendar as CalendarDays, CheckCircle as CheckCircle2, Download, Page as FileSpreadsheet, Spark as Sparkles } from 'iconoir-react';
+import React, { useCallback, useState } from 'react';
+import { Calendar as CalendarDays, CheckCircle as CheckCircle2, Download, Page as FileSpreadsheet, Spark as Sparkles, Upload } from 'iconoir-react';
 import { OverviewSection } from './OverviewSection';
 import { CommissionFeesSection } from './CommissionFeesSection';
 import { DataCoverageSection } from './DataCoverageSection';
@@ -9,6 +9,14 @@ import { PurchasesToNetSalesSection } from './PurchasesToNetSalesSection';
 import { PLByOutletSection } from './PLByOutletSection';
 import { ChannelFilter, DashboardSection, OutletFinancialData } from '../../types';
 import { copy } from '../../copy';
+import { SalesImportModal } from './SalesImportModal';
+import { ImportedSalesSection } from './ImportedSalesSection';
+import { AuthControl } from './AuthControl';
+
+const REPORTING_MONTHS = [
+  { value: '2026-05', label: 'May 2026', status: 'Sample data ready' },
+  { value: '2026-08', label: 'August 2026', status: 'Awaiting import' },
+] as const;
 
 interface SalesDashboardProps {
   entityFilter: 'all' | 'myUsPizza' | 'sabah';
@@ -36,6 +44,13 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
   onEntityFilterChange,
 }) => {
   const [exportNotice, setExportNotice] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [importRefreshToken, setImportRefreshToken] = useState(0);
+  const handleSessionChange = useCallback(() => setImportRefreshToken((token) => token + 1), []);
+  const [reportingMonth, setReportingMonth] = useState<(typeof REPORTING_MONTHS)[number]['value']>('2026-05');
+  const selectedMonth = REPORTING_MONTHS.find((month) => month.value === reportingMonth) ?? REPORTING_MONTHS[0];
+  const hasDashboardData = reportingMonth === '2026-05';
 
   const handleExport = () => {
     setExportNotice(true);
@@ -54,15 +69,35 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
             </span>
           </div>
           <h1 className="mt-1 text-xl sm:text-2xl font-black tracking-tight text-slate-900">
-            {copy.dashTitle}
+            {hasDashboardData ? copy.dashTitle : `${selectedMonth.label} P&L`}
           </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700">
+          <label className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700">
             <CalendarDays className="h-3.5 w-3.5 text-slate-500" />
-            <span>{copy.dashReporting}</span>
-          </div>
+            <span className="sr-only">Reporting month</span>
+            <select
+              value={reportingMonth}
+              onChange={(event) => setReportingMonth(event.target.value as (typeof REPORTING_MONTHS)[number]['value'])}
+              className="bg-transparent pr-1 font-bold text-slate-700 outline-none"
+              aria-label="Reporting month"
+            >
+              {REPORTING_MONTHS.map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}
+            </select>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setIsImportOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-[#C8102E] bg-white px-3.5 py-1.5 text-xs font-bold text-[#C8102E] shadow-xs transition-colors hover:bg-rose-50"
+            title="Import monthly sales Excel files"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            <span>Import Sales</span>
+          </button>
+
+          <AuthControl onSessionChange={handleSessionChange} />
 
           <button
             type="button"
@@ -83,20 +118,39 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
         </div>
       )}
 
+      {importNotice && (
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-800 animate-in fade-in slide-in-from-top-1">
+          {importNotice}
+        </div>
+      )}
+
+      {isImportOpen && (
+        <SalesImportModal
+          onClose={() => setIsImportOpen(false)}
+          onComplete={(message) => {
+            setImportNotice(message);
+            setImportRefreshToken((token) => token + 1);
+            setTimeout(() => setImportNotice(null), 4000);
+          }}
+        />
+      )}
+
+      {!hasDashboardData && <ImportedSalesSection reportingMonth={reportingMonth} refreshToken={importRefreshToken} />}
+
       {/* Section Views */}
-      {section === 'overview' && (
+      {hasDashboardData && section === 'overview' && (
         <OverviewSection
           entityFilter={entityFilter}
           channelFilter={channelFilter}
           onEntityFilterChange={onEntityFilterChange}
         />
       )}
-      {section === 'fees' && <CommissionFeesSection channelFilter={channelFilter} />}
-      {section === 'coverage' && <DataCoverageSection outlets={outlets} onGoToTasks={onGoToTasks} />}
-      {section === 'salesByOutlet' && <SalesByOutletSection entityFilter={entityFilter} />}
-      {section === 'purchasesByOutlet' && <PurchasesByOutletSection entityFilter={entityFilter} />}
-      {section === 'purchasesToNetSales' && <PurchasesToNetSalesSection entityFilter={entityFilter} />}
-      {section === 'plByOutlet' && (
+      {hasDashboardData && section === 'fees' && <CommissionFeesSection channelFilter={channelFilter} />}
+      {hasDashboardData && section === 'coverage' && <DataCoverageSection outlets={outlets} onGoToTasks={onGoToTasks} />}
+      {hasDashboardData && section === 'salesByOutlet' && <SalesByOutletSection entityFilter={entityFilter} />}
+      {hasDashboardData && section === 'purchasesByOutlet' && <PurchasesByOutletSection entityFilter={entityFilter} />}
+      {hasDashboardData && section === 'purchasesToNetSales' && <PurchasesToNetSalesSection entityFilter={entityFilter} />}
+      {hasDashboardData && section === 'plByOutlet' && (
         <PLByOutletSection
           selectedCode={selectedOutletCode}
           onSelectOutlet={onSelectOutlet}
