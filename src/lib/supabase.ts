@@ -12,7 +12,9 @@ export function getSupabaseClient() {
   const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
   if (!url || !publishableKey) {
-    throw new Error('Supabase is not configured. Add the VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY values to .env.local.')
+    throw new Error(
+      'Supabase is not configured. Add the VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY values to .env.local.',
+    )
   }
 
   supabaseClient = createClient<any>(url, publishableKey)
