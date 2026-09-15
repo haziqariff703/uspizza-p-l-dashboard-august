@@ -7,11 +7,14 @@ import { Badge } from '../../components/ui/badge';
 import { Separator } from '../../components/ui/separator';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { cn } from '../../lib/utils';
+import { sumKnown, type OverviewValues } from '../../data/importedOverview';
 
 interface OverviewPageProps {
   entityFilter: EntityScope;
   channelFilter: ChannelFilter;
   onEntityFilterChange?: (filter: EntityScope) => void;
+  imported?: { totals: OverviewValues; counts: Record<EntityScope, number> };
+  period?: string;
 }
 
 /**
@@ -19,11 +22,12 @@ interface OverviewPageProps {
  * en-MY, no fraction digits, and the sign preserved (per-outlet commission and
  * adjustments can be negative, so never Math.abs here).
  */
-const money = (value: number) =>
+const money = (value: number | null) => value === null ? 'Unavailable' :
   `RM ${value.toLocaleString('en-MY', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const percent = (value: number | null, digits = 0) => value === null ? 'Unavailable' : `${value.toFixed(digits)}%`;
 
 /** Sub-ringgit residue from summing float diffs reads as nothing, so show a dash. */
-const cell = (value: number) => (Math.abs(value) < 1 ? '—' : money(value));
+const cell = (value: number | null) => value === null ? 'Unavailable' : (Math.abs(value) < 1 ? '—' : money(value));
 
 const ENTITY_TABS: { id: EntityScope; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -35,8 +39,12 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   entityFilter,
   channelFilter,
   onEntityFilterChange,
+  imported,
+  period = 'May 2026',
 }) => {
-  const totals = useMemo(() => aggregate(scopeOutlets(entityFilter)), [entityFilter]);
+  const sampleTotals = useMemo(() => aggregate(scopeOutlets(entityFilter)), [entityFilter]);
+  const totals: OverviewValues = imported?.totals ?? sampleTotals;
+  const counts = imported?.counts ?? scopeCounts;
 
   /** Net sales per entity, for the scope toggle's tooltips. */
   const entityNet = useMemo(
@@ -52,8 +60,8 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   // The original Overview always shows all five platforms — the channel filter
   // drives section 2, not this block. Highlight the column instead of hiding.
   const platforms = totals.byPlatform;
-  const settlementTotal = platforms.reduce((sum, p) => sum + p.settlement, 0);
-  const keptPctTotal = totals.grossMenu > 0 ? (settlementTotal / totals.grossMenu) * 100 : 0;
+  const settlementTotal = sumKnown(platforms.map(p => p.settlement));
+  const keptPctTotal = settlementTotal === null || totals.grossMenu === null ? null : totals.grossMenu > 0 ? (settlementTotal / totals.grossMenu) * 100 : 0;
 
   const barSegments = [
     { key: 'net', label: 'net sales', value: totals.net, color: BASIS_COLORS.net },
@@ -72,7 +80,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
     {
       label: '− Commission & fees',
       pick: (p: (typeof platforms)[number]) => p.commissionAndFees,
-      total: platforms.reduce((sum, p) => sum + p.commissionAndFees, 0),
+      total: sumKnown(platforms.map(p => p.commissionAndFees)),
       tone: 'text-amber-600',
     },
   ];
@@ -87,7 +95,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           <div>
             <CardTitle>Overview</CardTitle>
             <CardDescription>
-              Sales by metric · {totals.outletCount} outlets · May 2026
+              Sales by metric · {totals.outletCount} outlets · {period}
             </CardDescription>
           </div>
         </div>
@@ -105,13 +113,13 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                 type="button"
                 onClick={() => onEntityFilterChange?.(tab.id)}
                 aria-pressed={isActive}
-                title={`${scopeCounts[tab.id]} outlets · net sales ${money(entityNet[tab.id].net)}`}
+                title={imported ? `${counts[tab.id]} imported POS outlets` : `${counts[tab.id]} outlets · net sales ${money(entityNet[tab.id].net)}`}
                 className={cn(
                   'rounded-lg px-2.5 py-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-slate-400',
                   isActive ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 )}
               >
-                {tab.label} · {scopeCounts[tab.id]}
+                {tab.label} · {counts[tab.id]}
               </button>
             );
           })}
@@ -126,10 +134,10 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             <p className="mt-1 text-3xl font-extrabold tracking-tight tabular-nums text-slate-900 sm:text-4xl">
               {money(totals.net)}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Menu price − discount</p>
+            <p className="mt-1 text-xs text-slate-400">{imported ? 'Imported POS coverage · all channels · before SST' : 'Menu price − discount'}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="positive">{totals.margin.toFixed(1)}% gross margin</Badge>
+            <Badge variant={totals.margin === null ? 'default' : 'positive'}>{percent(totals.margin, 1)} gross margin</Badge>
             <Badge>GP {money(totals.grossProfit)}</Badge>
           </div>
         </div>
@@ -188,13 +196,13 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         <section aria-label="Profitability">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
             {[
-              { label: 'Total Purchases', value: money(totals.purchases), note: 'GRN received', tone: 'text-slate-900' },
+              { label: 'Total Purchases', value: money(totals.purchases), note: imported ? 'August GRN source required' : 'GRN received', tone: 'text-slate-900' },
               { label: 'Gross Profit', value: money(totals.grossProfit), note: 'Net − Purchases', tone: 'text-emerald-600' },
-              { label: 'Gross Margin', value: `${totals.margin.toFixed(1)}%`, note: 'of net sales', tone: 'text-emerald-600' },
+              { label: 'Gross Margin', value: percent(totals.margin, 1), note: 'of net sales', tone: 'text-emerald-600' },
               {
                 label: 'Net after Commission',
                 value: money(totals.netAfterCommission),
-                note: `less ${money(totals.commission)} comm.`,
+                note: imported ? 'Verified commission and settlement required' : `less ${money(totals.commission)} comm.`,
                 tone: 'text-slate-900',
               },
             ].map((stat) => (
@@ -230,10 +238,10 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               <div
                 key={p.platform}
                 style={{
-                  width: `${(p.settlement / settlementTotal) * 100}%`,
+                  width: `${settlementTotal > 0 ? (p.settlement / settlementTotal) * 100 : 0}%`,
                   background: PLATFORM_BRAND[p.label] ?? '#64748B',
                 }}
-                title={`${p.label}: ${money(p.settlement)} · ${((p.settlement / settlementTotal) * 100).toFixed(0)}% of settlement`}
+                title={`${p.label}: ${money(p.settlement)}`}
                 className="transition-all duration-500 motion-reduce:transition-none"
               />
             ))}
@@ -248,7 +256,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                 />
                 {p.label}
                 <span className="tabular-nums">
-                  {((p.settlement / settlementTotal) * 100).toFixed(0)}%
+                  {percent(settlementTotal === null ? null : settlementTotal > 0 ? (p.settlement / settlementTotal) * 100 : 0)}
                 </span>
               </span>
             ))}
@@ -277,7 +285,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                       </TableHead>
                     );
                   })}
-                  <TableHead className="text-right text-slate-900">Total</TableHead>
+                  <TableHead className="text-right text-slate-900">{imported ? 'All-channel POS' : 'Total'}</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -333,11 +341,11 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                       className="text-right text-xs font-semibold tabular-nums text-slate-500"
                       title={`${money(p.settlement)} of ${money(p.grossMenu)} gross sales`}
                     >
-                      {p.keptPct.toFixed(0)}%
+                      {percent(p.keptPct)}
                     </TableCell>
                   ))}
                   <TableCell className="text-right text-xs font-semibold tabular-nums text-slate-500">
-                    {keptPctTotal.toFixed(0)}%
+                    {percent(keptPctTotal)}
                   </TableCell>
                 </TableRow>
               </TableFooter>
@@ -345,8 +353,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
 
           <p className="mt-2 text-[11px] text-slate-400">
-            Commission &amp; fees here is what's left over after the platform's cut (collected − settled), so it
-            will not match section 2's detailed fee report — that is expected.
+            {imported ? 'Platform breakdown is incomplete. POS is all-channel and cannot be used as the POS-only column. Shopee Earnings includes a different tax basis and does not establish bank settlement. Missing charges are unavailable, not zero.' : "Commission & fees here is what's left over after the platform's cut (collected − settled), so it will not match section 2's detailed fee report — that is expected."}
           </p>
         </section>
       </CardContent>

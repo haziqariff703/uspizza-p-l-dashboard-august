@@ -15,15 +15,36 @@ export interface SalesDailyDraft {
   recordCount: number
 }
 
-const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : 0
+const number = (value: unknown) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (typeof value !== 'string') return 0
+
+  const trimmed = value.trim()
+  const isAccountingNegative = trimmed.startsWith('(') && trimmed.endsWith(')')
+  const normalized = trimmed
+    .replace(/^RM\s*/i, '')
+    .replace(/[(),\s]/g, '')
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed)) return 0
+  return isAccountingNegative ? -parsed : parsed
+}
+
+const isoLocalDate = (value: Date) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
 
 function isoDate(value: unknown): string | null {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10)
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return isoLocalDate(value)
   if (typeof value !== 'string') return null
   const match = value.match(/(\d{2})\/(\d{2})\/(\d{4})/)
   if (match) return `${match[3]}-${match[2]}-${match[1]}`
+  const namedMonthMatch = value.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/)
+  if (namedMonthMatch) {
+    const month = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+      .indexOf(namedMonthMatch[2].toLowerCase()) + 1
+    if (month > 0) return `${namedMonthMatch[3]}-${String(month).padStart(2, '0')}-${namedMonthMatch[1].padStart(2, '0')}`
+  }
   const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10)
+  return Number.isNaN(parsed.getTime()) ? null : isoLocalDate(parsed)
 }
 
 function add(rows: Map<string, SalesDailyDraft>, item: Omit<SalesDailyDraft, 'grossSales' | 'discount' | 'netSales' | 'tax' | 'serviceCharge' | 'platformFees' | 'advertisingSpend' | 'payout' | 'recordCount'> & Partial<SalesDailyDraft>) {

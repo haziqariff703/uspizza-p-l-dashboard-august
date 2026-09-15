@@ -345,9 +345,9 @@ export const TopBar: React.FC<TopBarProps> = ({
               <legend className="sr-only">Entity filter</legend>
               {(
                 [
-                  { id: 'all', label: 'All · 44' },
-                  { id: 'myUsPizza', label: 'MY US Pizza · 42' },
-                  { id: 'sabah', label: 'Sabah · 2' },
+                  { id: 'all', label: 'All' },
+                  { id: 'myUsPizza', label: 'MY US Pizza' },
+                  { id: 'sabah', label: 'Sabah' },
                 ] as const
               ).map((opt) => (
                 <button

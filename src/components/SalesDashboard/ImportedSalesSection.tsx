@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { CheckCircle, RefreshCircle, WarningTriangle } from 'iconoir-react'
 import { getSupabaseClient } from '../../lib/supabase'
+import { importedOverview } from '../../data/importedOverview'
+import { EMPTY_MAPPINGS, parseMappings, type OutletMappings } from '../../data/outletMaster'
+import { OutletMappingPanel } from './OutletMappingPanel'
+import { OverviewPage } from '../../pages/overview/OverviewPage'
+import { type EntityScope } from '../../data/aggregate'
+import { type ChannelFilter, type DashboardSection } from '../../types'
 
 interface SalesDailyRow {
   sales_date: string
@@ -13,21 +19,30 @@ interface SalesDailyRow {
   advertising_spend: number | string
   payout: number | string
   record_count: number
+  tax: number | string
+  service_charge: number | string
 }
 
 interface ImportedSalesSectionProps {
   reportingMonth: string
   refreshToken: number
+  entityFilter: EntityScope
+  channelFilter: ChannelFilter
+  section: DashboardSection
+  onEntityFilterChange?: (filter: EntityScope) => void
 }
 
 const money = (value: number) => `RM ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-const asNumber = (value: number | string) => Number(value) || 0
 const sourceName = (source: string) => source === 'foodpanda' ? 'FoodPanda' : source === 'pos' ? 'POS' : source.charAt(0).toUpperCase() + source.slice(1)
+const PAGE_SIZE = 1000
 
-export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ reportingMonth, refreshToken }) => {
+export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ reportingMonth, refreshToken, entityFilter, channelFilter, section, onEntityFilterChange }) => {
   const [rows, setRows] = useState<SalesDailyRow[]>([])
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'needs-auth' | 'error'>('loading')
   const [message, setMessage] = useState('')
+  const [mappings, setMappings] = useState<OutletMappings>(EMPTY_MAPPINGS)
+  const [mappingKey, setMappingKey] = useState('')
+  const [mappingError, setMappingError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -43,15 +58,31 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           }
           return
         }
-        const { data, error } = await supabase
-          .from('sales_daily')
-          .select('sales_date, outlet_name, source, gross_sales, discount, net_sales, platform_fees, advertising_spend, payout, record_count')
-          .eq('reporting_month', `${reportingMonth}-01`)
-          .order('sales_date', { ascending: true })
-        if (error) throw error
+        const key = `us-pizza-outlet-mappings-v1:${auth.user.id}`
         if (!active) return
-        setRows((data ?? []) as SalesDailyRow[])
-        setStatus(data?.length ? 'ready' : 'empty')
+        setMappingKey(key)
+        try { setMappings(parseMappings(localStorage.getItem(key))); setMappingError('') }
+        catch { setMappings(EMPTY_MAPPINGS); setMappingError('Saved outlet mappings could not be read in this browser.') }
+        const importedRows: SalesDailyRow[] = []
+        let from = 0
+        while (true) {
+          const { data, error } = await supabase
+            .from('sales_daily')
+            .select('sales_date, outlet_name, source, gross_sales, discount, net_sales, tax, service_charge, platform_fees, advertising_spend, payout, record_count')
+            .eq('reporting_month', `${reportingMonth}-01`)
+            .order('sales_date', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, from + PAGE_SIZE - 1)
+          if (error) throw error
+          if (!active) return
+          const page = (data ?? []) as SalesDailyRow[]
+          importedRows.push(...page)
+          if (page.length < PAGE_SIZE) break
+          from += PAGE_SIZE
+        }
+        if (!active) return
+        setRows(importedRows)
+        setStatus(importedRows.length ? 'ready' : 'empty')
       } catch (error) {
         if (active) {
           setRows([])
@@ -64,40 +95,31 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
     return () => { active = false }
   }, [reportingMonth, refreshToken])
 
-  const summary = useMemo(() => {
-    const bySource = new Map<string, number>()
-    const byOutlet = new Map<string, number>()
-    const days = new Set<string>()
-    let gross = 0
-    let discount = 0
-    let net = 0
-    let fees = 0
-    let ads = 0
-    let payout = 0
-    let records = 0
-    for (const row of rows) {
-      gross += asNumber(row.gross_sales)
-      discount += asNumber(row.discount)
-      net += asNumber(row.net_sales)
-      fees += asNumber(row.platform_fees)
-      ads += asNumber(row.advertising_spend)
-      payout += asNumber(row.payout)
-      records += row.record_count
-      days.add(row.sales_date)
-      bySource.set(row.source, (bySource.get(row.source) ?? 0) + asNumber(row.net_sales))
-      byOutlet.set(row.outlet_name, (byOutlet.get(row.outlet_name) ?? 0) + asNumber(row.net_sales))
-    }
-    return { gross, discount, net, fees, ads, payout, records, days: days.size, sources: [...bySource.entries()].sort((a, b) => b[1] - a[1]), outlets: [...byOutlet.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10) }
-  }, [rows])
+  const overview = useMemo(() => importedOverview(rows, entityFilter, mappings), [rows, entityFilter, mappings])
+  const saveMappings = (value: OutletMappings) => {
+    try { localStorage.setItem(mappingKey, JSON.stringify(value)); setMappings(value); setMappingError('') }
+    catch { setMappingError('Mapping could not be saved. Check browser storage availability and try again.') }
+  }
+  const period = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(`${reportingMonth}-01T00:00:00`))
 
   if (status === 'loading') return <MonthlyState icon={<RefreshCircle className="h-5 w-5 animate-spin" />} title="Loading imported sales" message="Checking Supabase for this reporting month." />
   if (status === 'needs-auth') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Sales dashboard is ready" message="Imported figures will load after dashboard authentication is enabled." />
   if (status === 'error') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Could not load imported sales" message={message} />
   if (status === 'empty') return <MonthlyState icon={<CheckCircle className="h-5 w-5" />} title="This month has no imported sales yet" message="Use Import Sales to add POS, Grab, FoodPanda, Shopee, or Apps reports." />
 
-  return <section className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Gross sales" value={money(summary.gross)} /><Metric label="Discounts" value={money(summary.discount)} /><Metric label="Net sales" value={money(summary.net)} /><Metric label="Payout received" value={money(summary.payout)} /></div><div className="grid gap-4 lg:grid-cols-2"><TableCard title="Net sales by source" subtitle={`${summary.records.toLocaleString()} source records across ${summary.days} sales days`} rows={summary.sources.map(([name, value]) => [sourceName(name), money(value)])} /><TableCard title="Top outlets by net sales" subtitle={`Platform fees ${money(summary.fees)} · ads ${money(summary.ads)}`} rows={summary.outlets.map(([name, value]) => [name, money(value)])} /></div></section>
+  return <section className="space-y-4">
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      Imported coverage only; not a reconciled full-month corporate total. POS includes all channels, so platform reports are not added to it. Only imports accessible to your account are included.
+      <p className="mt-2">POS coverage: {overview.counts.myUsPizza} MY US Pizza + {overview.counts.sabah} Sabah + {overview.posUnmapped} unresolved names = {overview.counts.all} outlet groups. Unresolved names remain in All until mapped; aliases count once per canonical outlet.</p>
+    </div>
+    {mappingError && <p role="alert" className="text-sm text-red-700">{mappingError}</p>}
+    <OutletMappingPanel rows={rows} mappings={mappings} onSave={saveMappings} />
+    {section === 'overview' ? <OverviewPage entityFilter={entityFilter} channelFilter={channelFilter} onEntityFilterChange={onEntityFilterChange} imported={overview} period={period} />
+      : section === 'salesByOutlet' ? <TableCard title={`Sales by outlet · ${period}`} subtitle="Imported all-channel POS net sales before SST, grouped by canonical outlet. Unmapped source names are shown separately." rows={overview.outlets.map(o => [o.name, money(o.net)])} />
+      : section === 'coverage' ? <TableCard title={`Imported coverage · ${period}`} subtitle="Record counts are source rows, not necessarily orders. File completeness and duplicate checks are pending." rows={overview.coverage.map(c => [sourceName(c.source), `${c.records.toLocaleString()} records · ${c.days} dates · ${c.outlets} outlet names`])} />
+      : <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title={section === 'fees' ? 'Commission and fees unavailable' : 'Purchases and profitability unavailable'} message={section === 'fees' ? 'The imported fee and payout fields require source reconciliation. Shopee commission and bank settlement are not supplied by the order export.' : 'August purchases/GRN data is required to calculate purchases, gross profit, gross margin, and outlet P&L. Missing values cannot be treated as zero.'} />}
+  </section>
 }
 
-const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) => <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-xs"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-xl font-black tracking-tight text-slate-900">{value}</p></div>
 const TableCard: React.FC<{ title: string; subtitle: string; rows: [string, string][] }> = ({ title, subtitle, rows }) => <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs"><div className="border-b border-slate-100 px-5 py-4"><h2 className="font-bold text-slate-900">{title}</h2><p className="mt-0.5 text-xs text-slate-500">{subtitle}</p></div><div className="divide-y divide-slate-100">{rows.map(([name, value]) => <div key={name} className="flex items-center justify-between gap-4 px-5 py-3 text-sm"><span className="truncate font-medium text-slate-700">{name}</span><span className="shrink-0 font-bold text-slate-900">{value}</span></div>)}</div></div>
 const MonthlyState: React.FC<{ icon: React.ReactNode; title: string; message: string }> = ({ icon, title, message }) => <section className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center shadow-xs"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-[#C8102E]">{icon}</div><h2 className="mt-4 text-lg font-black text-slate-900">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">{message}</p></section>

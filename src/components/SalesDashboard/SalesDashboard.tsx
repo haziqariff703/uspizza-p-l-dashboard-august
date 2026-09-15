@@ -135,7 +135,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
         />
       )}
 
-      {!hasDashboardData && <ImportedSalesSection reportingMonth={reportingMonth} refreshToken={importRefreshToken} />}
+      {!hasDashboardData && <ImportedSalesSection reportingMonth={reportingMonth} refreshToken={importRefreshToken} entityFilter={entityFilter} channelFilter={channelFilter} section={section} onEntityFilterChange={onEntityFilterChange} />}
 
       {/* Section Views */}
       {hasDashboardData && section === 'overview' && (

@@ -145,10 +145,18 @@ locations) — Phase 2 must exclude by brand prefix before any location matching
 location text alone.
 
 ### Phase 2 — Ingestion rules & audit trail
-- [ ] Per-platform date/status/reversal/cancellation rules (Import and mapping #3)
-- [ ] Exclude July Shopee files from August (Import and mapping #4)
+- [x] Per-platform date/status/reversal/cancellation rules (Import and mapping #3) — implemented in the local August import/data-wiring path
+- [x] Exclude July Shopee files from August (Import and mapping #4)
 - [ ] Retain filename/sheet/row refs in local audit output, not shipped to browser (Import and mapping #5)
-- [ ] Strip customer PII from App source at aggregation, outlets only (Findings #8)
+- [x] Strip customer PII from App source at aggregation, outlets only (Findings #8)
+
+### Phase 2 implementation notes
+- [x] POS is treated as the all-channel sales total; platform rows are not added on top of POS.
+- [x] Sister-brand rows are excluded before outlet matching, including Manhattan FISH MARKET.
+- [x] Unknown outlet names remain visible for review through the outlet-mapping controls; they are not silently assigned.
+- [x] Missing purchases, profit, settlement and unsupported fee values are shown as unavailable rather than zero.
+- [ ] Finalise the authoritative August outlet/entity master for the 83 unresolved locations.
+- [ ] Connect the local rules and mapping results to the full Supabase document-ingestion workflow.
 
 ### Phase 3 — Aggregation, nulls, purchases gap
 - [ ] Produce deterministic August aggregates + separate issues report (Import and mapping #6)
@@ -186,4 +194,4 @@ location text alone.
 
 ## Status
 
-Requirements and preliminary source review are complete. Implementation and full reconciliation are pending. No financial data has been imported into the dashboard yet.
+Phase 1 is complete and Phase 2 is partly implemented in the local August data-wiring path. The dashboard now uses supported August POS figures and shows unsupported values as unavailable. Full Supabase ingestion and the final August outlet/entity master are still pending.
