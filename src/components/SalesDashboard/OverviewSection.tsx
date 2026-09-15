@@ -216,7 +216,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
               Net Settlement by Platform
             </h3>
             <p className="text-xs text-slate-400">
-              What actually reaches the bank, and how each figure derives from gross sales.
+              What actually lands in the bank, and how each number is worked out from gross sales.
             </p>
           </div>
 
@@ -345,8 +345,8 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
           </div>
 
           <p className="mt-2 text-[11px] text-slate-400">
-            Commission &amp; fees here is the residual the platform withheld (collected − settled), so it differs
-            from section 2's itemised fee report by design.
+            Commission &amp; fees here is what's left over after the platform's cut (collected − settled), so it
+            will not match section 2's detailed fee report — that is expected.
           </p>
         </section>
       </CardContent>
