@@ -6,14 +6,14 @@ const money = (value: number) => `RM ${Math.abs(value).toLocaleString()}`;
 
 const marginColor = (pct: number) => (pct >= 60 ? '#16a34a' : '#65a30d');
 
-interface PLByOutletSectionProps {
+interface PLByOutletPageProps {
   /** Outlet code to open on mount / when the navbar search jumps here. */
   selectedCode?: string | null;
   onSelectOutlet?: (code: string) => void;
   entityFilter: 'all' | 'myUsPizza' | 'sabah';
 }
 
-export const PLByOutletSection: React.FC<PLByOutletSectionProps> = ({ selectedCode, onSelectOutlet, entityFilter }) => {
+export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, onSelectOutlet, entityFilter }) => {
   const scopedOutlets = useMemo(
     () =>
       PL_BY_OUTLET.filter((outlet) =>

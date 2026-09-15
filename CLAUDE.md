@@ -25,13 +25,27 @@ npm run build    # vite build → dist/index.html (app) + dist/original.html (ca
 
 The original has seven numbered sections; the rebuild mirrors them via `DashboardSection` in `src/types.ts`, switched from the navbar dropdown and rendered by `SalesDashboard.tsx`.
 
-1. `overview` — `OverviewSection.tsx` — entity split, 4 sales-basis metrics, purchases/GP/margin, per-platform net settlement derivation
-2. `fees` — `CommissionFeesSection.tsx` — commission, advertising, platform fees, reconciliation gap
-3. `coverage` — `DataCoverageSection.tsx` — per-channel report status, upcoming outlets
-4. `salesByOutlet` — `SalesByOutletSection.tsx`
-5. `purchasesByOutlet` — `PurchasesByOutletSection.tsx`
-6. `grossSalesByOutlet` — `GrossSalesByOutletSection.tsx`
-7. `plByOutlet` — `PLByOutletSection.tsx`
+**The sections live in `src/pages/`, one folder each — they are pages, not components.** Everything they
+import (the shell, `SectionHeading`, `ui/*`, `common/*`) stays in `src/components/`.
+
+| # | `DashboardSection` id | File |
+|---|---|---|
+| 1 | `overview` | `src/pages/overview/OverviewPage.tsx` — entity split, 4 sales-basis metrics, purchases/GP/margin, per-platform net settlement derivation |
+| 2 | `fees` | `src/pages/fees/CommissionFeesPage.tsx` — commission, advertising, platform fees, reconciliation gap |
+| 3 | `coverage` | `src/pages/coverage/DataCoveragePage.tsx` — per-channel report status, upcoming outlets |
+| 4 | `salesByOutlet` | `src/pages/sales-by-outlet/SalesByOutletPage.tsx` |
+| 5 | `purchasesByOutlet` | `src/pages/purchases-by-outlet/PurchasesByOutletPage.tsx` |
+| 6 | `purchasesToNetSales` | `src/pages/purchases-to-net-sales/PurchasesToNetSalesPage.tsx` |
+| 7 | `plByOutlet` | `src/pages/pl-by-outlet/PLByOutletPage.tsx` |
+
+A page sits two folders below `src/`, exactly like the old `components/SalesDashboard/` location, so
+`../../data/*`, `../../types`, `../../copy` etc. resolve unchanged; reach shared UI via
+`../../components/ui/*`.
+
+`src/components/SalesDashboard/` keeps the non-section files: `SalesDashboard.tsx` (the shell that
+switches pages and owns the reporting-month selector), `SectionHeading.tsx` (shared by pages 2 and 3),
+plus `SalesImportModal.tsx`, `ImportedSalesSection.tsx` and `AuthControl.tsx`. Sections only render when
+the reporting month is May 2026; other months show `ImportedSalesSection` instead.
 
 Two extra modules exist outside the dashboard (`currentTab` in `App.tsx`): Tasks (kanban/table + modals) and Full Matrix View. Leave them alone unless asked.
 

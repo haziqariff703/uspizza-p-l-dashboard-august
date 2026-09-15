@@ -10,9 +10,9 @@ Current Git state when this handoff was written:
 
 - Current branch: `feature/data-wire-in-august`.
 - User-owned, pre-existing unstaged edits are present in:
-  - `src/components/SalesDashboard/CommissionFeesSection.tsx`
-  - `src/components/SalesDashboard/DataCoverageSection.tsx`
-  - `src/components/SalesDashboard/OverviewSection.tsx`
+  - `src/pages/fees/CommissionFeesPage.tsx` (was `src/components/SalesDashboard/CommissionFeesSection.tsx`)
+  - `src/pages/coverage/DataCoveragePage.tsx` (was `src/components/SalesDashboard/DataCoverageSection.tsx`)
+  - `src/pages/overview/OverviewPage.tsx` (was `src/components/SalesDashboard/OverviewSection.tsx`)
   - `src/copy.ts`
 - Preserve those edits. This checklist is newly added by this data-wiring work.
 
