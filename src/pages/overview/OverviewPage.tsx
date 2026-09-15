@@ -2,13 +2,13 @@ import React, { useMemo } from 'react';
 import { ChannelFilter } from '../../types';
 import { BASIS_COLORS, PLATFORM_BRAND } from '../../platformColors';
 import { EntityScope, aggregate, scopeCounts, scopeOutlets } from '../../data/aggregate';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Badge } from '../ui/badge';
-import { Separator } from '../ui/separator';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Separator } from '../../components/ui/separator';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { cn } from '../../lib/utils';
 
-interface OverviewSectionProps {
+interface OverviewPageProps {
   entityFilter: EntityScope;
   channelFilter: ChannelFilter;
   onEntityFilterChange?: (filter: EntityScope) => void;
@@ -31,7 +31,7 @@ const ENTITY_TABS: { id: EntityScope; label: string }[] = [
   { id: 'sabah', label: 'Sabah' },
 ];
 
-export const OverviewSection: React.FC<OverviewSectionProps> = ({
+export const OverviewPage: React.FC<OverviewPageProps> = ({
   entityFilter,
   channelFilter,
   onEntityFilterChange,

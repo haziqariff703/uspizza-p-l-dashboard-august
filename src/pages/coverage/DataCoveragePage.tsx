@@ -16,16 +16,16 @@ import {
   Xmark as X,
 } from 'iconoir-react';
 import { ENTITY_TOTALS } from '../../data/outletData';
-import { SectionHeading } from './SectionHeading';
+import { SectionHeading } from '../../components/SalesDashboard/SectionHeading';
 import { CoverageState, OutletFinancialData } from '../../types';
-import { PlatformLogo } from '../common/PlatformLogo';
+import { PlatformLogo } from '../../components/common/PlatformLogo';
 import { copy } from '../../copy';
-import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import { Card, CardContent } from '../ui/card';
-import { Input } from '../ui/input';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent } from '../../components/ui/card';
+import { Input } from '../../components/ui/input';
 
-interface DataCoverageSectionProps {
+interface DataCoveragePageProps {
   outlets: OutletFinancialData[];
   onGoToTasks: () => void;
 }
@@ -49,7 +49,7 @@ const STATE_META: Record<CoverageState, { label: string; icon: typeof Check; cla
 
 const STATE_ORDER: CoverageState[] = ['checked', 'received', 'missing', 'na'];
 
-export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlets, onGoToTasks }) => {
+export const DataCoveragePage: React.FC<DataCoveragePageProps> = ({ outlets, onGoToTasks }) => {
   // Table search, filter, and pagination state
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'has_missing' | 'complete'>('all');

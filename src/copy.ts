@@ -9,6 +9,7 @@ export const copy = {
   navDescCoverage: 'Outlet coverage',
   navDescSalesByOutlet: 'Net sales ranked, all 44 outlets',
   navDescPurchasesByOutlet: 'GRN received, all 44 outlets',
+  // Unused: the grossSalesByOutlet page was removed; section 6 is now purchasesToNetSales.
   navDescGrossSalesByOutlet: 'Menu price before discount, per outlet',
   navDescPLByOutlet: 'Net sales − purchases, per outlet',
   navReconciled: 'Reconciled',
@@ -24,7 +25,7 @@ export const copy = {
   dashReporting: 'Reporting: May 2026',
   dashExportCsv: 'Export CSV',
 
-  // OverviewSection
+  // OverviewPage
   overviewSubtitle: 'May 2026 · 44 outlets',
   overviewSubtitlePrefix: 'May 2026',
   overviewAutoSummary: 'Auto summary',
@@ -38,7 +39,7 @@ export const copy = {
   overviewViewCalc: 'Show calculation',
   overviewHideCalc: 'Hide calculation',
 
-  // CommissionFeesSection
+  // CommissionFeesPage
   feesGapIntro:
     'The fee report and the bank statements use different dates.',
   feesGapOutro: 'We need the original invoices to fix this.',
@@ -52,7 +53,7 @@ export const copy = {
   feesTableSubtitle:
     'Includes Grab, FoodPanda, ShopeeFood, and US Pizza Apps. Does not include in-store POS.',
 
-  // DataCoverageSection
+  // DataCoveragePage
   coverageAssessed: 'Across 44 outlets.',
   coverageWebAppsNote: 'Both use the same US Pizza App ID.',
   coverageGrnNote: 'Used for purchases. Matched to warehouse delivery tickets.',

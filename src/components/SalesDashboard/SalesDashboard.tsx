@@ -1,12 +1,12 @@
 import React, { useCallback, useState } from 'react';
 import { Calendar as CalendarDays, CheckCircle as CheckCircle2, Download, Page as FileSpreadsheet, Spark as Sparkles, Upload } from 'iconoir-react';
-import { OverviewSection } from './OverviewSection';
-import { CommissionFeesSection } from './CommissionFeesSection';
-import { DataCoverageSection } from './DataCoverageSection';
-import { SalesByOutletSection } from './SalesByOutletSection';
-import { PurchasesByOutletSection } from './PurchasesByOutletSection';
-import { PurchasesToNetSalesSection } from './PurchasesToNetSalesSection';
-import { PLByOutletSection } from './PLByOutletSection';
+import { OverviewPage } from '../../pages/overview/OverviewPage';
+import { CommissionFeesPage } from '../../pages/fees/CommissionFeesPage';
+import { DataCoveragePage } from '../../pages/coverage/DataCoveragePage';
+import { SalesByOutletPage } from '../../pages/sales-by-outlet/SalesByOutletPage';
+import { PurchasesByOutletPage } from '../../pages/purchases-by-outlet/PurchasesByOutletPage';
+import { PurchasesToNetSalesPage } from '../../pages/purchases-to-net-sales/PurchasesToNetSalesPage';
+import { PLByOutletPage } from '../../pages/pl-by-outlet/PLByOutletPage';
 import { ChannelFilter, DashboardSection, OutletFinancialData } from '../../types';
 import { copy } from '../../copy';
 import { SalesImportModal } from './SalesImportModal';
@@ -139,19 +139,19 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
 
       {/* Section Views */}
       {hasDashboardData && section === 'overview' && (
-        <OverviewSection
+        <OverviewPage
           entityFilter={entityFilter}
           channelFilter={channelFilter}
           onEntityFilterChange={onEntityFilterChange}
         />
       )}
-      {hasDashboardData && section === 'fees' && <CommissionFeesSection channelFilter={channelFilter} />}
-      {hasDashboardData && section === 'coverage' && <DataCoverageSection outlets={outlets} onGoToTasks={onGoToTasks} />}
-      {hasDashboardData && section === 'salesByOutlet' && <SalesByOutletSection entityFilter={entityFilter} />}
-      {hasDashboardData && section === 'purchasesByOutlet' && <PurchasesByOutletSection entityFilter={entityFilter} />}
-      {hasDashboardData && section === 'purchasesToNetSales' && <PurchasesToNetSalesSection entityFilter={entityFilter} />}
+      {hasDashboardData && section === 'fees' && <CommissionFeesPage channelFilter={channelFilter} />}
+      {hasDashboardData && section === 'coverage' && <DataCoveragePage outlets={outlets} onGoToTasks={onGoToTasks} />}
+      {hasDashboardData && section === 'salesByOutlet' && <SalesByOutletPage entityFilter={entityFilter} />}
+      {hasDashboardData && section === 'purchasesByOutlet' && <PurchasesByOutletPage entityFilter={entityFilter} />}
+      {hasDashboardData && section === 'purchasesToNetSales' && <PurchasesToNetSalesPage entityFilter={entityFilter} />}
       {hasDashboardData && section === 'plByOutlet' && (
-        <PLByOutletSection
+        <PLByOutletPage
           selectedCode={selectedOutletCode}
           onSelectOutlet={onSelectOutlet}
           entityFilter={entityFilter}

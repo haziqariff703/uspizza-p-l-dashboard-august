@@ -5,21 +5,21 @@ import { COMMISSION_FEES_SUMMARY, PLATFORM_SETTLEMENTS } from '../../data/outlet
 import { ChannelFilter } from '../../types';
 import { FEE_TYPE_COLORS } from '../../platformColors';
 import { copy } from '../../copy';
-import { PlatformLogo } from '../common/PlatformLogo';
-import { SectionHeading } from './SectionHeading';
-import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '../ui/table';
+import { PlatformLogo } from '../../components/common/PlatformLogo';
+import { SectionHeading } from '../../components/SalesDashboard/SectionHeading';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 
-interface CommissionFeesSectionProps { channelFilter: ChannelFilter; }
+interface CommissionFeesPageProps { channelFilter: ChannelFilter; }
 const PLATFORMS = ['Grab', 'FoodPanda', 'Shopee', 'Apps'] as const;
 const FEE_ROWS = [{ key: 'commission', label: 'Commission' }, { key: 'advertising', label: 'Advertising' }, { key: 'platformFees', label: 'Platform / service fees' }, { key: 'paymentGateway', label: 'Payment gateway' }, { key: 'adjustments', label: 'Adjustments / credits' }] as const;
 type FeePlatform = (typeof PLATFORMS)[number];
 type FeeKey = (typeof FEE_ROWS)[number]['key'];
 const money = (n: number) => `RM ${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
-export const CommissionFeesSection: React.FC<CommissionFeesSectionProps> = ({ channelFilter }) => {
+export const CommissionFeesPage: React.FC<CommissionFeesPageProps> = ({ channelFilter }) => {
   const { platforms, advertisingSpend, advertisingBreakdown, commissionMonth, totalFeesMonth } = COMMISSION_FEES_SUMMARY;
   const [active, setActive] = useState<FeePlatform | 'All'>('All');
   const [dialogOpen, setDialogOpen] = useState(false);

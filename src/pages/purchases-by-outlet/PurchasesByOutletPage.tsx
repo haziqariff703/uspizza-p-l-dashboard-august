@@ -45,7 +45,7 @@ const PurchaseLabel = ({
 };
 
 /** Section 5, real GRN purchases per outlet — ported from docs/original-capture.html. */
-export const PurchasesByOutletSection: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
+export const PurchasesByOutletPage: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
   const rows = useMemo(
     () =>
       PL_BY_OUTLET.filter((outlet) =>

@@ -12,7 +12,7 @@ const PurchaseLabel = ({ x = 0, y = 0, width = 0, height = 0, value }: { x?: num
   ) : null
 );
 
-export const PurchasesToNetSalesSection: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
+export const PurchasesToNetSalesPage: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
   const rows = useMemo(
     () => PL_BY_OUTLET
       .filter((outlet) => entityFilter === 'all' ? true : entityFilter === 'sabah' ? outlet.entity === 'Sabah' : outlet.entity === 'MY US PIZZA')

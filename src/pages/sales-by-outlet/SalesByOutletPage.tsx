@@ -77,7 +77,7 @@ const PlatformLegend = () => (
   </div>
 );
 
-export const SalesByOutletSection: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
+export const SalesByOutletPage: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
   const [metric, setMetric] = useState<Metric>('gross');
   const [viewMode, setViewMode] = useState<ViewMode>('platform');
 
