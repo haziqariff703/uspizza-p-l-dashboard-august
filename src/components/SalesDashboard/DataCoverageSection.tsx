@@ -20,6 +20,10 @@ import { SectionHeading } from './SectionHeading';
 import { CoverageState, OutletFinancialData } from '../../types';
 import { PlatformLogo } from '../common/PlatformLogo';
 import { copy } from '../../copy';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card, CardContent } from '../ui/card';
+import { Input } from '../ui/input';
 
 interface DataCoverageSectionProps {
   outlets: OutletFinancialData[];
@@ -124,14 +128,10 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
         title="Data Coverage & Outlet Matrix"
         subtitle={`${tradingTotal} active trading outlets · May 2026`}
         action={
-          <button
-            type="button"
-            onClick={onGoToTasks}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs transition-colors hover:bg-slate-50"
-          >
-            <span>Verification tasks</span>
+          <Button variant="outline" onClick={onGoToTasks}>
+            <span>Go to tasks</span>
             <ArrowRight className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         }
       />
 
@@ -142,14 +142,15 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
             <CheckCircle2 className="h-4 w-4 text-sky-600" />
             <span>{larkAlertSent}</span>
           </div>
-          <button
+          <Button
+            variant="secondary"
             onClick={() => setLarkAlertSent(null)}
             aria-label="Dismiss notification"
             title="Dismiss"
-            className="text-sky-700 hover:text-sky-900"
+            className="min-h-0 rounded-full bg-transparent p-1 text-sky-700 shadow-none hover:bg-sky-100 hover:text-sky-900"
           >
             <X className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
       )}
 
@@ -169,9 +170,10 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
                 <PlatformLogo platform={channel === 'Web' ? 'Apps' : channel} size="xs" />
                 <span className="text-sm font-semibold text-slate-700">{channel}</span>
               </div>
-              <div className={`mt-1 text-lg font-bold ${isComplete ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {isComplete ? '✓ complete' : `${missing} missing`}
-              </div>
+              <Badge variant={isComplete ? 'positive' : 'negative'} className="mt-2 gap-1 text-sm">
+                {isComplete ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />}
+                {isComplete ? 'All in' : `${missing} missing`}
+              </Badge>
             </div>
           );
         })}
@@ -183,33 +185,34 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
         ).length;
         return incomplete === 0 ? (
           <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-700">
-            ✓ All {trading.length} trading outlets have complete reports across every channel for May 2026.
+            ✓ All {trading.length} trading outlets have every channel's report in for May 2026.
           </div>
         ) : (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-            {incomplete} of {trading.length} trading outlets still have a channel report outstanding for May 2026.
+            {incomplete} of {trading.length} trading outlets are still missing a channel report for May 2026.
           </div>
         );
       })()}
 
       {/* Channel Summary Card Grid */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+      <Card>
+        <CardContent className="py-5">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                Channel Verification Health
+                Channel Check Status
               </span>
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+              <Badge variant="positive" className="text-[10px]">
                 {checkedTotal}/{reportsTotal} Reconciled
-              </span>
+              </Badge>
             </div>
             <p className="mt-1 text-xs text-slate-500">
               {copy.coverageAssessed}
             </p>
           </div>
           <div className="text-right">
-            <span className="text-xs font-bold text-slate-400 uppercase">Verification Rate</span>
+            <span className="text-xs font-bold text-slate-400 uppercase">Check Rate</span>
             <p className="text-xl font-black tabular-nums text-slate-900">
               {((checkedTotal / reportsTotal) * 100).toFixed(1)}%
             </p>
@@ -248,7 +251,7 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
 
         {/* Legend */}
         <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-slate-100 pt-3 text-[11px] text-slate-500">
-          <span className="font-bold text-slate-700">Audit Statuses:</span>
+          <span className="font-bold text-slate-700">Status key:</span>
           {STATE_ORDER.map((state) => {
             const meta = STATE_META[state];
             return (
@@ -258,22 +261,23 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
                 </span>
                 <strong className="text-slate-800">{meta.label}</strong>
                 <span className="text-slate-500">
-                  {state === 'checked' ? '(Reconciled)' : state === 'received' ? '(File in, pending audit)' : state === 'missing' ? '(Not received)' : '(Pre-opening)'}
+                  {state === 'checked' ? '(Reconciled)' : state === 'received' ? '(File in, not checked yet)' : state === 'missing' ? '(Not received)' : '(Pre-opening)'}
                 </span>
               </span>
             );
           })}
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Interactive Outlet Coverage Table with Live Search and Pagination */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
+      <Card className="overflow-hidden">
         {/* Table Toolbar */}
         <div className="border-b border-slate-200 bg-slate-50/70 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="flex items-center gap-2 flex-1 max-w-md">
             <div className="relative w-full">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input
+              <Input
                 type="text"
                 placeholder={copy.coverageSearchPlaceholder}
                 value={searchTerm}
@@ -281,7 +285,7 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
                   setSearchTerm(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#C8102E] focus:outline-none focus:ring-1 focus:ring-[#C8102E]"
+                className="pl-9 pr-8"
               />
               {searchTerm && (
                 <button
@@ -299,48 +303,48 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
           <div className="flex items-center flex-wrap gap-2">
             {/* Status Filter Chips */}
             <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs">
-              <button
-                type="button"
+              <Button
+                variant="outline"
                 onClick={() => {
                   setStatusFilter('all');
                   setCurrentPage(1);
                 }}
-                className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                className={`min-h-0 rounded-md border-0 px-2.5 py-1 shadow-none ${
                   statusFilter === 'all'
                     ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'bg-transparent text-slate-600 hover:bg-transparent hover:text-slate-900'
                 }`}
               >
-                All Outlets ({outlets.length})
-              </button>
-              <button
-                type="button"
+                All outlets ({outlets.length})
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => {
                   setStatusFilter('has_missing');
                   setCurrentPage(1);
                 }}
-                className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                className={`min-h-0 rounded-md border-0 px-2.5 py-1 shadow-none ${
                   statusFilter === 'has_missing'
-                    ? 'bg-rose-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-rose-600 text-white shadow-xs hover:bg-rose-600'
+                    : 'bg-transparent text-slate-600 hover:bg-transparent hover:text-slate-900'
                 }`}
               >
-                Missing Reports
-              </button>
-              <button
-                type="button"
+                Missing reports
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => {
                   setStatusFilter('complete');
                   setCurrentPage(1);
                 }}
-                className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                className={`min-h-0 rounded-md border-0 px-2.5 py-1 shadow-none ${
                   statusFilter === 'complete'
-                    ? 'bg-emerald-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-emerald-700 text-white shadow-xs hover:bg-emerald-700'
+                    : 'bg-transparent text-slate-600 hover:bg-transparent hover:text-slate-900'
                 }`}
               >
-                100% Reconciled
-              </button>
+                100% reconciled
+              </Button>
             </div>
 
             {/* Page Size Selector */}
@@ -367,7 +371,7 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
           <table className="w-full table-fixed text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-3 text-left">Outlet / Store</th>
+                <th className="px-4 py-3 text-left">Outlet</th>
                 <th className="w-24 px-3 py-3 text-left">Entity</th>
                 {CHANNELS.map((ch) => (
                   <th key={ch} className="w-16 px-2 py-3 text-center">
@@ -378,8 +382,8 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
                     </span>
                   </th>
                 ))}
-                <th className="w-28 px-4 py-3 text-right">Coverage %</th>
-                <th className="w-24 px-3 py-3 text-right">Lark Action</th>
+                <th className="w-28 px-4 py-3 text-right">Coverage</th>
+                <th className="w-24 px-3 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -408,9 +412,9 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
                             {outlet.code}
                           </span>
                           {isUpcoming && (
-                            <span className="shrink-0 rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-bold text-sky-700 border border-sky-200">
+                            <Badge variant="info" className="shrink-0 rounded px-1.5 py-0.5 text-[11px]">
                               Upcoming
-                            </span>
+                            </Badge>
                           )}
                         </div>
                         <span className="text-[11px] text-slate-500">{outlet.state}</span>
@@ -471,15 +475,15 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
                       {/* Lark Action Button */}
                       <td className="px-3 py-2.5 text-right">
                         {missingChannel ? (
-                          <button
-                            type="button"
+                          <Button
+                            variant="outline"
                             onClick={() => handleTriggerLarkReminder(outlet.name, missingChannel[0])}
-                            className="inline-flex items-center gap-1 rounded-md bg-rose-50 border border-rose-200 px-2 py-1 text-[10px] font-bold text-rose-700 hover:bg-rose-100 transition-colors focus-visible:ring-2 focus-visible:ring-rose-400"
+                            className="min-h-0 rounded-md border-rose-200 bg-rose-50 px-2 py-1 text-[10px] text-rose-700 shadow-none hover:bg-rose-100"
                             title={`Send Lark ping for missing ${missingChannel[0]} file`}
                           >
                             <SendHorizontal className="h-2.5 w-2.5" aria-hidden="true" />
                             <span>Ping</span>
-                          </button>
+                          </Button>
                           ) : (
                             <span className="text-[11px] text-slate-500 font-medium">—</span>
                           )}
@@ -515,9 +519,9 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
                           {outlet.code}
                         </span>
                         {isUpcoming && (
-                          <span className="shrink-0 rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[11px] font-bold text-sky-700">
+                          <Badge variant="info" className="shrink-0 rounded px-1.5 py-0.5 text-[11px]">
                             Upcoming
-                          </span>
+                          </Badge>
                         )}
                       </div>
                       <span className="text-[11px] text-slate-500">
@@ -558,15 +562,15 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
                   </div>
 
                   {missingChannel && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
                       onClick={() => handleTriggerLarkReminder(outlet.name, missingChannel[0])}
-                      className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400"
+                      className="min-h-0 rounded-md border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] text-rose-700 shadow-none hover:bg-rose-100"
                       title={`Send Lark ping for missing ${missingChannel[0]} file`}
                     >
                       <SendHorizontal className="h-3 w-3" aria-hidden="true" />
                       <span>Ping for {missingChannel[0]}</span>
-                    </button>
+                    </Button>
                   )}
                 </article>
               );
@@ -583,55 +587,52 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
           </div>
 
           <div className="flex items-center gap-1.5 self-end sm:self-auto">
-            <button
-              type="button"
+            <Button
+              variant="outline"
               disabled={currentPage === 1}
               onClick={() => handlePageChange(currentPage - 1)}
-              className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="min-h-0 px-2.5 py-1"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
               <span>Prev</span>
-            </button>
+            </Button>
 
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((pg) => (
-              <button
+              <Button
                 key={pg}
-                type="button"
+                variant={currentPage === pg ? 'default' : 'outline'}
                 onClick={() => handlePageChange(pg)}
-                className={`h-7 w-7 rounded-lg text-xs font-bold transition-all ${
-                  currentPage === pg
-                    ? 'bg-[#C8102E] text-white shadow-xs'
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
+                className={`min-h-0 h-7 w-7 px-0 ${currentPage === pg ? 'bg-[#C8102E] hover:bg-[#C8102E]' : ''}`}
               >
                 {pg}
-              </button>
+              </Button>
             ))}
 
-            <button
-              type="button"
+            <Button
+              variant="outline"
               disabled={currentPage === totalPages}
               onClick={() => handlePageChange(currentPage + 1)}
-              className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="min-h-0 px-2.5 py-1"
             >
               <span>Next</span>
               <ChevronRight className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Upcoming Outlets & Technical Source Card */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <article className="rounded-xl border border-sky-200 bg-sky-50/60 p-5 shadow-xs">
+        <Card className="border-sky-200 bg-sky-50/60">
+          <CardContent className="py-5">
           <div className="flex items-center gap-2.5">
             <Store className="h-5 w-5 text-sky-700" />
             <div>
               <p className="text-sm font-bold text-sky-950">
-                {upcoming.length} Upcoming Outlets — Not Yet Trading
+                {upcoming.length} outlets not open yet
               </p>
               <p className="text-xs text-sky-900/70">
-                Excluded from the {tradingTotal} trading count, included in the {tradingTotal + upcoming.length} corporate total.
+                Not part of the {tradingTotal} trading outlets, but counted in the {tradingTotal + upcoming.length} total for the whole company.
               </p>
             </div>
           </div>
@@ -648,18 +649,20 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
               </li>
             ))}
           </ul>
-        </article>
+          </CardContent>
+        </Card>
 
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+        <Card>
+          <CardContent className="py-5">
           <div className="flex items-center gap-2.5">
             <Database className="h-5 w-5 text-slate-600" />
-            <p className="text-sm font-bold text-slate-900">Channel Naming &amp; Source Pipeline</p>
+            <p className="text-sm font-bold text-slate-900">Channel names &amp; where the data comes from</p>
           </div>
           <dl className="mt-4 space-y-2.5 text-xs">
             <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-              <dt className="font-bold text-slate-800">Apps vs. Web Source Uniformity</dt>
+              <dt className="font-bold text-slate-800">"Apps" and "Web" are the same channel</dt>
               <dd className="mt-0.5 text-slate-500">
-                The channel listed as <strong className="text-slate-700">"Web"</strong> in coverage is consolidated as <strong className="text-slate-700">"Apps"</strong> in platform fee reconciliation. {copy.coverageWebAppsNote}
+                The channel called <strong className="text-slate-700">"Web"</strong> here is grouped as <strong className="text-slate-700">"Apps"</strong> in the platform fee reconciliation. {copy.coverageWebAppsNote}
               </dd>
             </div>
             <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
@@ -675,7 +678,8 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
               </dd>
             </div>
           </dl>
-        </article>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
