@@ -374,12 +374,8 @@ export const DataCoverageSection: React.FC<DataCoverageSectionProps> = ({ outlet
                 <th className="px-4 py-3 text-left">Outlet</th>
                 <th className="w-24 px-3 py-3 text-left">Entity</th>
                 {CHANNELS.map((ch) => (
-                  <th key={ch} className="w-16 px-2 py-3 text-center">
-                    <span className="inline-flex items-center justify-center gap-1">
-                      <PlatformLogo platform={ch === 'Web' ? 'Apps' : ch} size="xs" />
-                      <span className="sr-only">{ch}</span>
-                      <span aria-hidden="true" className="hidden xl:inline">{ch}</span>
-                    </span>
+                  <th key={ch} className="w-16 px-1 py-3 text-center break-words">
+                    {ch}
                   </th>
                 ))}
                 <th className="w-28 px-4 py-3 text-right">Coverage</th>
