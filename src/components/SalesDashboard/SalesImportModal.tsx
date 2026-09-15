@@ -99,10 +99,12 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ onClose, onC
       }
 
       for (const item of files) {
+        console.info('[sales-import] starting file', { source: item.source, size: item.file.size })
         const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
         const storagePath = `${auth.user.id}/${reportingMonth}/${item.source.toLowerCase()}/${Date.now()}-${safeName}`
         const { error: uploadError } = await supabase.storage.from('sales-imports').upload(storagePath, item.file, { upsert: false })
         if (uploadError) throw uploadError
+        console.info('[sales-import] storage upload complete', { source: item.source })
 
         const { data: importRecord, error: insertError } = await supabase.from('sales_imports').insert({
           reporting_month: `${reportingMonth}-01`,
@@ -114,8 +116,11 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ onClose, onC
           uploaded_by: auth.user.id,
         }).select('id').single()
         if (insertError) throw insertError
+        if (!importRecord) throw new Error('Supabase did not return the saved import record.')
+        console.info('[sales-import] metadata saved', { source: item.source })
 
         const dailyRows = await parseSalesFile(item.file, item.source)
+        console.info('[sales-import] parsing complete', { source: item.source, dailyRows: dailyRows.length })
         if (dailyRows.length) {
           const { error: dailyError } = await supabase.from('sales_daily').insert(dailyRows.map((row) => ({
             import_id: importRecord.id,
@@ -134,12 +139,14 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ onClose, onC
             record_count: row.recordCount,
           })))
           if (dailyError) throw dailyError
+          console.info('[sales-import] daily rows saved', { source: item.source, dailyRows: dailyRows.length })
         }
       }
 
       onComplete(`${files.length} sales file${files.length === 1 ? '' : 's'} saved for ${monthLabel(reportingMonth)}.`)
       onClose()
     } catch (caught) {
+      console.error('[sales-import] failed', caught)
       setError(caught instanceof Error ? caught.message : 'Import failed. Please try again.')
     } finally {
       setIsUploading(false)
