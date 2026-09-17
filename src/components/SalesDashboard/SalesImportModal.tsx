@@ -190,7 +190,22 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ reportingMon
       const supabase = getSupabaseClient()
       const { data: auth, error: authError } = await supabase.auth.getUser()
       if (authError || !auth.user) {
-        throw new Error('Sign in before importing. Every import belongs to the account that uploaded it.')
+        throw new Error('Sign in before importing. Imported dashboard data is shared with every signed-in user.')
+      }
+
+      // Once a source is available for the selected month, everyone can view
+      // it. Do not create a second copy merely because another user needs it.
+      const fileSources = [...new Set(files.map(item => item.source.toLowerCase()))]
+      const { data: existingImports, error: existingImportsError } = await supabase
+        .from('sales_imports')
+        .select('file_name, source')
+        .eq('reporting_month', `${reportingMonth}-01`)
+        .in('source', fileSources)
+        .eq('status', 'imported')
+        .limit(1)
+      if (existingImportsError) throw new Error(existingImportsError.message)
+      if (existingImports?.length) {
+        throw new Error(`${existingImports[0].source} data for ${monthLabel(reportingMonth)} is already available to all signed-in users (${existingImports[0].file_name}). No upload is needed.`)
       }
       if (auth.user.id !== analyzedOwner) {
         setPlan(null)

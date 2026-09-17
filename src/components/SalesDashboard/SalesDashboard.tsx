@@ -15,7 +15,13 @@ import { AuthControl } from './AuthControl';
 
 const REPORTING_MONTHS = [
   { value: '2026-05', label: 'May 2026', status: 'Sample data ready' },
+  { value: '2026-06', label: 'June 2026', status: 'Awaiting import' },
+  { value: '2026-07', label: 'July 2026', status: 'Awaiting import' },
   { value: '2026-08', label: 'August 2026', status: 'Awaiting import' },
+  { value: '2026-09', label: 'September 2026', status: 'Awaiting import' },
+  { value: '2026-10', label: 'October 2026', status: 'Awaiting import' },
+  { value: '2026-11', label: 'November 2026', status: 'Awaiting import' },
+  { value: '2026-12', label: 'December 2026', status: 'Awaiting import' },
 ] as const;
 
 interface SalesDashboardProps {

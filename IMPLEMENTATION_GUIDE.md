@@ -11,7 +11,7 @@ The active Supabase test database uses six tables only. The previous organizatio
 1. Keep every amount as an exact decimal string while importing. Do not use JavaScript floating-point arithmetic for money.
 2. A missing applicable value is `null`, not RM0.
 3. Use the 44-outlet `PL_BY_OUTLET` list as the import authority. Resolve names/codes and existing source spelling variants automatically. Exclude unmatched/ambiguous names with a visible report; no manual outlet confirmation or creation step.
-4. The prototype is owned by the signed-in Supabase user. Each account sees only its own data.
+4. Dashboard data is shared across signed-in users. The uploader retains management rights, while everyone authenticated can view the processed figures.
 5. May remains labelled static demo data. Imported months read Supabase data.
 6. Keep original source files in private Storage. Upload paths are `<user-id>/<import-id>/<filename>` without upsert.
 
