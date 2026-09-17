@@ -3,7 +3,7 @@ import { CheckCircle, RefreshCircle, WarningTriangle } from 'iconoir-react'
 import { getSupabaseClient } from '../../lib/supabase'
 import { importedOverview, type ImportedRow } from '../../data/importedOverview'
 import { outletProfitability, type PurchaseRow } from '../../data/importedPurchases'
-import { OutletMappingPanel } from './OutletMappingPanel'
+import { coverageTotals, importedCoverage, COVERAGE_STATE_LABELS } from '../../data/importedCoverage'
 import { EMPTY_DIRECTORY, loadOutletDirectory, type OutletDirectory } from '../../lib/outletDirectory'
 import { OverviewPage } from '../../pages/overview/OverviewPage'
 import { ENTITY_NAMES, type EntityScope } from '../../data/aggregate'
@@ -48,6 +48,7 @@ interface JoinedPurchaseRow {
   outlet_id: string
   outlets: JoinedOutlet | null
 }
+interface ImportStatusRow { source: string; file_name: string; status: string; created_at: string }
 
 /** Reads one table a page at a time, so a full month is never silently truncated. */
 async function readAll<T>(page: (from: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
@@ -64,6 +65,7 @@ async function readAll<T>(page: (from: number) => PromiseLike<{ data: unknown; e
 export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ reportingMonth, refreshToken, entityFilter, channelFilter, section, onEntityFilterChange }) => {
   const [rows, setRows] = useState<ImportedRow[]>([])
   const [purchases, setPurchases] = useState<PurchaseRow[]>([])
+  const [imports, setImports] = useState<ImportStatusRow[]>([])
   const [directory, setDirectory] = useState<OutletDirectory>(EMPTY_DIRECTORY)
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'needs-auth' | 'error'>('loading')
   const [message, setMessage] = useState('')
@@ -77,7 +79,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
 
   useEffect(() => {
     let active = true
-    const clear = () => { setRows([]); setPurchases([]); setDirectory(EMPTY_DIRECTORY); setRefreshError('') }
+    const clear = () => { setRows([]); setPurchases([]); setImports([]); setDirectory(EMPTY_DIRECTORY); setRefreshError('') }
 
     const load = async () => {
       // A month change is known before any network call, so the previous
@@ -111,7 +113,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
 
       try {
         const month = `${reportingMonth}-01`
-        const [sales, bought] = await Promise.all([
+        const [sales, bought, imported] = await Promise.all([
           readAll<JoinedSalesRow>(from => supabase
             .from('sales_daily')
             .select(`
@@ -135,6 +137,16 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
             .order('purchase_date', { ascending: true })
             .order('outlet_id', { ascending: true })
             .range(from, from + PAGE_SIZE - 1)),
+          // Failed and draft imports leave no sales_daily rows at all, so they
+          // would otherwise vanish instead of showing as an actionable gap.
+          (async () => {
+            const { data, error } = await supabase.from('sales_imports')
+              .select('source, file_name, status, created_at')
+              .eq('reporting_month', month)
+              .order('created_at', { ascending: false })
+            if (error) throw new Error(error.message)
+            return (data ?? []) as ImportStatusRow[]
+          })(),
         ])
         if (!active) return
 
@@ -159,7 +171,8 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           entity: row.outlets?.entity ?? null,
           purchase_amount: row.purchase_amount,
         })))
-        setStatus(sales.length || bought.length ? 'ready' : 'empty')
+        setImports(imported)
+        setStatus(sales.length || bought.length || imported.length ? 'ready' : 'empty')
         loadedScopeRef.current = scope
         reloadDirectory()
       } catch (caught) {
@@ -181,12 +194,24 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
     overview.outlets,
     purchases.filter(row => entityFilter === 'all' || row.entity === ENTITY_NAMES[entityFilter]),
   ), [overview.outlets, purchases, entityFilter])
+  // Section 3 reads what actually landed: rows per outlet and source, plus the
+  // import statuses, so a failed file is a state rather than an absence.
+  const coverage = useMemo(() => importedCoverage({
+    directory,
+    rows: rows.filter(row => entityFilter === 'all' || row.entity === ENTITY_NAMES[entityFilter]),
+    automaticOutlets: true,
+    failedSources: imports.filter(item => item.status === 'failed').map(item => item.source),
+    purchaseOutletIds: purchases.map(row => row.outlet_id),
+  }), [directory, rows, imports, purchases, entityFilter])
   const period = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(`${reportingMonth}-01T00:00:00`))
 
   if (status === 'loading') return <MonthlyState icon={<RefreshCircle className="h-5 w-5 animate-spin" />} title="Loading imported sales" message="Checking Supabase for this reporting month." />
   if (status === 'needs-auth') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Sign in to see imported figures" message="Imported sales belong to the account that uploaded them. Sign in with that account to load this month." />
   if (status === 'error') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Could not load imported sales" message={message} />
-  if (status === 'empty') return <MonthlyState icon={<CheckCircle className="h-5 w-5" />} title="This month has no imported sales yet" message="Use Import Sales to add POS, Grab, FoodPanda, Shopee, or Apps reports." />
+  // Import analysis prepares missing P&L master records automatically.
+  if (status === 'empty') return <section className="space-y-4">
+    <MonthlyState icon={<CheckCircle className="h-5 w-5" />} title="This month has no imported sales yet" message="Use Import Sales to add POS, Grab, FoodPanda, Shopee, or Apps reports." />
+  </section>
 
   return <section className="space-y-4">
     {isRefreshing && <p role="status" className="flex items-center gap-2 text-xs font-medium text-slate-500"><RefreshCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />Refreshing imported sales…</p>}
@@ -195,10 +220,13 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
       Imported coverage only; not a reconciled full-month corporate total. POS includes all channels, so platform reports are not added to it. Only imports belonging to your account are included.
       <p className="mt-2">POS coverage: {overview.counts.myUsPizza} MY US Pizza + {overview.counts.sabah} Sabah = {overview.counts.all} outlets.</p>
     </div>
-    <OutletMappingPanel directory={directory} onChange={reloadDirectory} />
     {section === 'overview' ? <OverviewPage entityFilter={entityFilter} channelFilter={channelFilter} onEntityFilterChange={onEntityFilterChange} imported={overview} period={period} />
       : section === 'salesByOutlet' ? <TableCard title={`Sales by outlet · ${period}`} subtitle="Imported all-channel POS net sales before SST, by canonical outlet." headers={['Outlet', 'Net sales']} rows={overview.outlets.map(o => [o.name, money(o.net)])} />
-      : section === 'coverage' ? <TableCard title={`Imported coverage · ${period}`} subtitle="Record counts are source rows, not necessarily orders. File completeness and duplicate checks are pending." headers={['Source', 'Coverage']} rows={overview.coverage.map(c => [sourceName(c.source), `${c.records.toLocaleString()} records · ${c.days} dates · ${c.outlets} outlets`])} />
+      : section === 'coverage' ? <div className="space-y-4">
+          <TableCard title={`Channel coverage · ${period}`} subtitle="Outlets per state, by source. Imported means rows landed; Unavailable means no rows were imported for the outlet/source; Failed means this month's import did not finish. Nothing here claims a reconciled month." headers={['Source', 'Imported', 'Failed', 'Unavailable']} rows={coverageTotals(coverage).map(entry => [entry.source === 'grn' ? 'GRN / purchases' : sourceName(entry.source), String(entry.counts.imported), String(entry.counts.failed), String(entry.counts.unavailable)])} />
+          <TableCard title={`Outlet coverage · ${period}`} subtitle="Every outlet this account owns, and what each source delivered for it. Record counts are source rows, not necessarily orders." headers={['Outlet', 'POS', 'Grab', 'FoodPanda', 'Shopee', 'Apps', 'GRN']} rows={coverage.map(outlet => [outlet.name, ...outlet.cells.map(cell => cell.state === 'imported' && cell.records ? `${COVERAGE_STATE_LABELS[cell.state]} · ${cell.records.toLocaleString()} / ${cell.days}d` : COVERAGE_STATE_LABELS[cell.state])])} />
+          <TableCard title="Import status" subtitle="Every sales file uploaded for this month, most recent first. A draft or failed import contributed no figures above." headers={['File', 'Source', 'Status']} rows={imports.length ? imports.map(i => [i.file_name, sourceName(i.source), i.status]) : [['No imports yet', '—', '—']]} />
+        </div>
       : section === 'purchasesByOutlet' ? <TableCard title={`Purchases by outlet · ${period}`} subtitle="Imported GRN purchase totals. An outlet with no imported purchases stays unavailable; it is not RM 0." headers={['Outlet', 'Purchases']} rows={profitability.map(o => [o.name, money(o.purchases)])} />
       : section === 'purchasesToNetSales' ? <TableCard title={`Purchases to net sales · ${period}`} subtitle="Both figures must be imported before a ratio exists." headers={['Outlet', 'Net sales', 'Purchases', 'Purchases % of net']} rows={profitability.map(o => [o.name, money(o.net), money(o.purchases), o.margin === null ? 'Unavailable' : percent(100 - o.margin)])} />
       : section === 'plByOutlet' ? <TableCard title={`P&L by outlet · ${period}`} subtitle="Gross profit is net sales minus purchases. Neither is assumed when a source did not supply it." headers={['Outlet', 'Net sales', 'Purchases', 'Gross profit', 'Margin']} rows={profitability.map(o => [o.name, money(o.net), money(o.purchases), money(o.grossProfit), percent(o.margin)])} />
