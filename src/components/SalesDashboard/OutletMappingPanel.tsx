@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { ENTITY_NAMES } from '../../data/aggregate'
-import { aliasKey, OUTLET_MASTER, outletNameKey, resolveOutlet, type OutletMappings } from '../../data/outletMaster'
+import { aliasKey, isSisterBrand, OUTLET_MASTER, outletNameKey, resolveOutlet, type OutletMappings } from '../../data/outletMaster'
 
 interface Props {
   rows: Array<{ source: string; outlet_name: string }>
@@ -15,7 +15,7 @@ export function OutletMappingPanel({ rows, mappings, onSave }: Props) {
   const [entity, setEntity] = useState<string>(ENTITY_NAMES.myUsPizza)
   const [error, setError] = useState('')
   const master = [...OUTLET_MASTER, ...mappings.outlets].sort((a, b) => a.name.localeCompare(b.name))
-  const names = [...new Map(rows.filter(r => /^us pizza\b/i.test(r.outlet_name.trim())).map(r => [aliasKey(r.source, r.outlet_name), r])).entries()]
+  const names = [...new Map(rows.filter(r => !isSisterBrand(r.outlet_name)).map(r => [aliasKey(r.source, r.outlet_name), r])).entries()]
     .sort((a, b) => a[1].outlet_name.localeCompare(b[1].outlet_name))
   const unresolved = names.filter(([, r]) => !resolveOutlet(r.source, r.outlet_name, mappings))
   const selected = names.find(([key]) => key === selection)?.[1]

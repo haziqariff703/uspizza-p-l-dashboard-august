@@ -15,18 +15,32 @@ export const OUTLET_MASTER: CanonicalOutlet[] = [
   })),
 ]
 
+// Sister brands share our locations but not our sales, so they are rejected by
+// name. This is a denylist, not a "must be branded US Pizza" gate: a source name
+// we do not recognise stays visible as unmapped instead of being dropped.
+// Extend this list when another sister brand appears in a source export.
+const SISTER_BRANDS = [/manhattan\s+fish\s+market/i]
+export const isSisterBrand = (name: string) => SISTER_BRANDS.some(brand => brand.test(name))
+
 // Only typography is automatic. Location abbreviations require an explicit alias.
 export const outletNameKey = (name: string) => name.trim().toLowerCase()
   .replace(/^us\s+pizza\b\s*[-–—(]?\s*/, '')
   .replace(/[’']/g, '').replace(/[().,]/g, '').replace(/\s+/g, ' ').trim()
+// An operating-company prefix ("Marshall's Co - Greenlane") is dropped only as a
+// fallback, and only when what remains names exactly one master outlet.
+const afterOperatorPrefix = (key: string) => key.match(/^.+?\s[-–—]\s(.+)$/)?.[1].trim()
 export const aliasKey = (source: string, name: string) => `${source}:${outletNameKey(name)}`
 export function resolveOutlet(source: string, name: string, mappings: OutletMappings = EMPTY_MAPPINGS) {
-  if (!/^us\s+pizza\b/i.test(name.trim())) return undefined
+  if (isSisterBrand(name)) return undefined
   const master = [...OUTLET_MASTER, ...mappings.outlets]
   const alias = mappings.aliases[aliasKey(source, name)]
   if (alias) return master.find(o => o.id === alias)
-  const matches = master.filter(o => outletNameKey(o.name) === outletNameKey(name))
-  return matches.length === 1 ? matches[0] : undefined
+  const unique = (key: string | undefined) => {
+    const matches = key ? master.filter(o => outletNameKey(o.name) === key) : []
+    return matches.length === 1 ? matches[0] : undefined
+  }
+  const key = outletNameKey(name)
+  return unique(key) ?? unique(afterOperatorPrefix(key))
 }
 
 export function parseMappings(raw: string | null): OutletMappings {

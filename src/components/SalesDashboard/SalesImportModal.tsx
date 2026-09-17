@@ -2,7 +2,9 @@ import React, { useRef, useState } from 'react'
 import { NavArrowRight, Page as FileSpreadsheet, Upload } from 'iconoir-react'
 import * as XLSX from 'xlsx'
 import { getSupabaseClient } from '../../lib/supabase'
-import { parseSalesFile, type SalesSource } from '../../lib/salesImportParser'
+import { MAPPING_VERSION, PARSER_VERSION, parseSalesFile, type SalesSource } from '../../lib/salesImportParser'
+import { canImport, loadOpenPeriod } from '../../lib/organization'
+import { CONTRACT_MISMATCH_MESSAGE, type OrganizationScope } from '../../lib/useOrganizationScope'
 
 interface ImportFile {
   file: File
@@ -12,6 +14,8 @@ interface ImportFile {
 }
 
 interface SalesImportModalProps {
+  /** The explicitly selected organization every write is scoped to. */
+  scope: OrganizationScope
   onClose: () => void
   onComplete: (message: string) => void
 }
@@ -64,13 +68,23 @@ function inspectWorkbook(file: File): Promise<ImportFile> {
   })
 }
 
-export const SalesImportModal: React.FC<SalesImportModalProps> = ({ onClose, onComplete }) => {
+/** Identifies the exact workbook, so the same file cannot be imported twice. */
+async function fileHash(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+// Staged rows are one per source row, so a month can be tens of thousands.
+const STAGING_BATCH = 500
+
+export const SalesImportModal: React.FC<SalesImportModalProps> = ({ scope, onClose, onComplete }) => {
   const inputRef = useRef<HTMLInputElement>(null)
   const [files, setFiles] = useState<ImportFile[]>([])
   const [reportingMonth, setReportingMonth] = useState('')
   const [source, setSource] = useState<SalesSource>('POS')
   const [error, setError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [progress, setProgress] = useState('')
 
   const handleFiles = async (selected: FileList | null) => {
     if (!selected?.length) return
@@ -88,6 +102,14 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ onClose, onC
   const handleImport = async () => {
     if (!reportingMonth) return setError('Choose the reporting month before importing.')
     if (!files.length) return setError('Choose at least one sales report.')
+    // Never fall back to the old direct-to-dashboard path when the database
+    // does not speak this contract.
+    if (!scope.contract.compatible) return setError(CONTRACT_MISMATCH_MESSAGE)
+    const membership = scope.selected
+    if (!membership) return setError('Select an organization before importing.')
+    if (!canImport(membership.role)) {
+      return setError(`Importing needs the preparer or admin role. Your role in ${membership.organizationName} is ${membership.role}.`)
+    }
 
     setIsUploading(true)
     setError(null)
@@ -98,58 +120,127 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ onClose, onC
         throw new Error('Import will be enabled after dashboard authentication is set up.')
       }
 
-      for (const item of files) {
-        console.info('[sales-import] starting file', { source: item.source, size: item.file.size })
-        const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-        const storagePath = `${auth.user.id}/${reportingMonth}/${item.source.toLowerCase()}/${Date.now()}-${safeName}`
-        const { error: uploadError } = await supabase.storage.from('sales-imports').upload(storagePath, item.file, { upsert: false })
-        if (uploadError) throw uploadError
-        console.info('[sales-import] storage upload complete', { source: item.source })
+      // An import must belong to an open period covering the whole month. The
+      // database enforces this too; asking here gives a usable message instead
+      // of a constraint error after the file has already been read and uploaded.
+      const period = await loadOpenPeriod(membership.organizationId, reportingMonth)
+      if (!period) {
+        throw new Error(`${monthLabel(reportingMonth)} has no open reporting period in ${membership.organizationName}. An approver opens one before imports can be accepted.`)
+      }
 
-        const { data: importRecord, error: insertError } = await supabase.from('sales_imports').insert({
+      for (const item of files) {
+        setProgress(`Reading ${item.file.name}…`)
+        const hash = await fileHash(item.file)
+        const importId = crypto.randomUUID()
+        const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        // The database guard requires exactly organization_id/import_id/filename.
+        const storagePath = `${membership.organizationId}/${importId}/${safeName}`
+
+        // 1. The import record exists FIRST, so the upload has an owner and any
+        //    later failure is recorded against something rather than orphaned.
+        const { error: insertError } = await supabase.from('sales_imports').insert({
+          id: importId,
+          organization_id: membership.organizationId,
+          reporting_period_id: period.id,
           reporting_month: `${reportingMonth}-01`,
           source: item.source.toLowerCase(),
           file_name: item.file.name,
           storage_path: storagePath,
           file_size: item.file.size,
-          row_count: item.rowCount,
+          row_count: 0,
           uploaded_by: auth.user.id,
-        }).select('id').single()
-        if (insertError) throw insertError
-        if (!importRecord) throw new Error('Supabase did not return the saved import record.')
-        console.info('[sales-import] metadata saved', { source: item.source })
+          file_hash: hash,
+          parser_version: PARSER_VERSION,
+          mapping_version: MAPPING_VERSION,
+          status: 'parsing',
+        })
+        if (insertError) throw new Error(`${item.file.name}: ${insertError.message}`)
 
-        const dailyRows = await parseSalesFile(item.file, item.source)
-        console.info('[sales-import] parsing complete', { source: item.source, dailyRows: dailyRows.length })
-        if (dailyRows.length) {
-          const { error: dailyError } = await supabase.from('sales_daily').insert(dailyRows.map((row) => ({
-            import_id: importRecord.id,
-            reporting_month: `${reportingMonth}-01`,
-            sales_date: row.salesDate,
-            outlet_name: row.outletName,
-            source: row.source.toLowerCase(),
-            gross_sales: row.grossSales,
-            discount: row.discount,
-            net_sales: row.netSales,
-            tax: row.tax,
-            service_charge: row.serviceCharge,
-            platform_fees: row.platformFees,
-            advertising_spend: row.advertisingSpend,
-            payout: row.payout,
-            record_count: row.recordCount,
-          })))
-          if (dailyError) throw dailyError
-          console.info('[sales-import] daily rows saved', { source: item.source, dailyRows: dailyRows.length })
+        // From here a failure is recorded on the import instead of thrown away.
+        const fail = async (status: 'needs_mapping' | 'failed', detail: string) => {
+          await supabase.rpc('set_sales_import_status', { p_import: importId, p_status: status, p_detail: detail.slice(0, 500) })
+        }
+
+        try {
+          // 2. Upload the original bytes to the exact path the import authorizes.
+          setProgress(`Uploading ${item.file.name}…`)
+          const { error: uploadError } = await supabase.storage.from('sales-imports').upload(storagePath, item.file, { upsert: false })
+          if (uploadError) throw uploadError
+
+          setProgress(`Parsing ${item.file.name}…`)
+          let parsed
+          try {
+            parsed = await parseSalesFile(item.file, item.source, reportingMonth)
+          } catch (caught) {
+            const detail = caught instanceof Error ? caught.message : 'Parsing failed.'
+            // An unreadable layout stops at needs_mapping; it is never guessed.
+            await fail('needs_mapping', detail)
+            throw new Error(detail)
+          }
+
+          // Only source_sheet/header_row_number may be written directly, and only
+          // while the import is still parsing.
+          const { error: metaError } = await supabase.from('sales_imports')
+            .update({ source_sheet: parsed.sheetName, header_row_number: parsed.headerRowNumber })
+            .eq('id', importId)
+          if (metaError) throw metaError
+
+          // 3. Record what is wrong with the file before any of its rows land.
+          if (parsed.issues.length) {
+            const { error: issueError } = await supabase.from('import_validation_issues').insert(parsed.issues.map((issue) => ({
+              organization_id: membership.organizationId,
+              sales_import_id: importId,
+              severity: issue.severity,
+              code: issue.code,
+              message: issue.message,
+            })))
+            if (issueError) throw issueError
+          }
+
+          // 4. Stage every source row, including the ones the profile could not
+          //    use. The browser writes no daily totals at all — publication does.
+          for (let from = 0; from < parsed.staged.length; from += STAGING_BATCH) {
+            const batch = parsed.staged.slice(from, from + STAGING_BATCH)
+            setProgress(`Staging ${item.file.name} — ${Math.min(from + batch.length, parsed.staged.length).toLocaleString()} of ${parsed.staged.length.toLocaleString()} rows…`)
+            const { error: stagingError } = await supabase.from('sales_import_rows').insert(batch.map((row) => ({
+              organization_id: membership.organizationId,
+              sales_import_id: importId,
+              source_sheet: parsed.sheetName,
+              source_row_number: row.sourceRowNumber,
+              raw_row_json: row.raw,
+              normalized_row_json: row.normalized,
+              source_record_key: row.sourceRecordKey,
+              // Outlet mapping is a reviewer decision; intake never guesses it.
+              outlet_id: null,
+              skip_reason: row.skipReason,
+              status: row.normalized ? 'valid' : 'staged',
+            })))
+            if (stagingError) throw stagingError
+          }
+
+          // 5. Freeze intake. The database re-checks the row count and that the
+          //    original file really is in Storage.
+          setProgress(`Submitting ${item.file.name} for review…`)
+          const { error: submitError } = await supabase.rpc('submit_sales_import', {
+            p_import: importId,
+            p_expected_rows: parsed.staged.length,
+          })
+          if (submitError) throw submitError
+        } catch (caught) {
+          const detail = caught instanceof Error ? caught.message : 'Import failed.'
+          await fail('failed', detail)
+          throw new Error(`${item.file.name}: ${detail}`)
         }
       }
 
-      onComplete(`${files.length} sales file${files.length === 1 ? '' : 's'} saved for ${monthLabel(reportingMonth)}.`)
+      onComplete(`${files.length} sales file${files.length === 1 ? '' : 's'} submitted for review for ${monthLabel(reportingMonth)}. An independent reviewer approves the rows before any figure appears.`)
       onClose()
     } catch (caught) {
       console.error('[sales-import] failed', caught)
       setError(caught instanceof Error ? caught.message : 'Import failed. Please try again.')
     } finally {
       setIsUploading(false)
+      setProgress('')
     }
   }
 
@@ -197,6 +288,7 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ onClose, onC
           </div>}
 
           <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900">The system keeps each original file and its reporting month. It will not automatically add POS and platform sales together, preventing double counting.</div>
+          {progress && <p role="status" className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">{progress}</p>}
           {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800">{error}</p>}
         </div>
 

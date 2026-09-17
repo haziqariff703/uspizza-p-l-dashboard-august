@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { CheckCircle, RefreshCircle, WarningTriangle } from 'iconoir-react'
 import { getSupabaseClient } from '../../lib/supabase'
 import { importedOverview } from '../../data/importedOverview'
 import { EMPTY_MAPPINGS, parseMappings, type OutletMappings } from '../../data/outletMaster'
 import { OutletMappingPanel } from './OutletMappingPanel'
+import { ImportReviewPanel } from './ImportReviewPanel'
+import { scopeKey, type OrganizationScope } from '../../lib/useOrganizationScope'
 import { OverviewPage } from '../../pages/overview/OverviewPage'
 import { type EntityScope } from '../../data/aggregate'
 import { type ChannelFilter, type DashboardSection } from '../../types'
@@ -12,18 +14,20 @@ interface SalesDailyRow {
   sales_date: string
   outlet_name: string
   source: string
-  gross_sales: number | string
-  discount: number | string
-  net_sales: number | string
-  platform_fees: number | string
-  advertising_spend: number | string
-  payout: number | string
+  gross_sales: number | string | null
+  discount: number | string | null
+  net_sales: number | string | null
+  platform_fees: number | string | null
+  advertising_spend: number | string | null
+  payout: number | string | null
   record_count: number
-  tax: number | string
-  service_charge: number | string
+  tax: number | string | null
+  service_charge: number | string | null
 }
 
 interface ImportedSalesSectionProps {
+  /** The explicitly selected organization every query below is filtered by. */
+  scope: OrganizationScope
   reportingMonth: string
   refreshToken: number
   entityFilter: EntityScope
@@ -32,30 +36,57 @@ interface ImportedSalesSectionProps {
   onEntityFilterChange?: (filter: EntityScope) => void
 }
 
-const money = (value: number) => `RM ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+const money = (value: number | null) => value === null ? 'Unavailable' : `RM ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 const sourceName = (source: string) => source === 'foodpanda' ? 'FoodPanda' : source === 'pos' ? 'POS' : source.charAt(0).toUpperCase() + source.slice(1)
 const PAGE_SIZE = 1000
 
-export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ reportingMonth, refreshToken, entityFilter, channelFilter, section, onEntityFilterChange }) => {
+export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ scope, reportingMonth, refreshToken, entityFilter, channelFilter, section, onEntityFilterChange }) => {
   const [rows, setRows] = useState<SalesDailyRow[]>([])
-  const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'needs-auth' | 'error'>('loading')
+  const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'needs-auth' | 'no-organization' | 'error'>('loading')
   const [message, setMessage] = useState('')
   const [mappings, setMappings] = useState<OutletMappings>(EMPTY_MAPPINGS)
   const [mappingKey, setMappingKey] = useState('')
   const [mappingError, setMappingError] = useState('')
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState('')
+  // Figures are cached per user + organization + month. A change of any of them
+  // is a different scope that must load its own data, never reuse another's.
+  const loadedScopeRef = useRef<string | null>(null)
+  const currentScope = scopeKey(scope, reportingMonth)
 
   useEffect(() => {
     let active = true
     const load = async () => {
-      setStatus('loading')
+      // Reserve the full-page loading state for the first visit only. Subsequent
+      // refreshes keep the last successful figures on screen while Supabase is
+      // revalidated in the background.
+      const isInitialLoad = loadedScopeRef.current !== currentScope
+      if (isInitialLoad) setStatus('loading')
+      else {
+        setIsRefreshing(true)
+        setRefreshError('')
+      }
       try {
         const supabase = getSupabaseClient()
         const { data: auth, error: authError } = await supabase.auth.getUser()
         if (authError || !auth.user) {
           if (active) {
-            setRows([])
-            setStatus('needs-auth')
+            if (loadedScopeRef.current === currentScope) {
+              setRefreshError('Your session has expired. Showing the last loaded figures.')
+            } else {
+              setRows([])
+              setStatus('needs-auth')
+            }
           }
+          return
+        }
+        // Membership, not authentication, decides which figures exist.
+        const membership = scope.selected
+        if (!active) return
+        if (!membership) {
+          setRows([])
+          loadedScopeRef.current = null
+          setStatus('no-organization')
           return
         }
         const key = `us-pizza-outlet-mappings-v1:${auth.user.id}`
@@ -69,6 +100,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           const { data, error } = await supabase
             .from('sales_daily')
             .select('sales_date, outlet_name, source, gross_sales, discount, net_sales, tax, service_charge, platform_fees, advertising_spend, payout, record_count')
+            .eq('organization_id', membership.organizationId)
             .eq('reporting_month', `${reportingMonth}-01`)
             .order('sales_date', { ascending: true })
             .order('id', { ascending: true })
@@ -83,18 +115,31 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
         if (!active) return
         setRows(importedRows)
         setStatus(importedRows.length ? 'ready' : 'empty')
+        loadedScopeRef.current = currentScope
       } catch (error) {
         if (active) {
-          setRows([])
-          setStatus('error')
-          setMessage(error instanceof Error ? error.message : 'Unable to load imported sales.')
+          const errorMessage = error instanceof Error ? error.message : 'Unable to load imported sales.'
+          if (loadedScopeRef.current === currentScope) setRefreshError(errorMessage)
+          else {
+            setRows([])
+            setStatus('error')
+            setMessage(errorMessage)
+          }
         }
+      } finally {
+        if (active) setIsRefreshing(false)
       }
     }
     void load()
     return () => { active = false }
-  }, [reportingMonth, refreshToken])
+  }, [currentScope, reportingMonth, refreshToken, scope.selected])
 
+  useEffect(() => {
+    if (loadedScopeRef.current !== null && loadedScopeRef.current !== currentScope) {
+      setRows([])
+      setRefreshError('')
+    }
+  }, [currentScope])
   const overview = useMemo(() => importedOverview(rows, entityFilter, mappings), [rows, entityFilter, mappings])
   const saveMappings = (value: OutletMappings) => {
     try { localStorage.setItem(mappingKey, JSON.stringify(value)); setMappings(value); setMappingError('') }
@@ -104,16 +149,20 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
 
   if (status === 'loading') return <MonthlyState icon={<RefreshCircle className="h-5 w-5 animate-spin" />} title="Loading imported sales" message="Checking Supabase for this reporting month." />
   if (status === 'needs-auth') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Sales dashboard is ready" message="Imported figures will load after dashboard authentication is enabled." />
+  if (status === 'no-organization') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="You are not in an organization yet" message="Imported figures belong to an organization, not to an account. Open the organization menu in the header to create one, or ask an admin to invite this email address." />
   if (status === 'error') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Could not load imported sales" message={message} />
   if (status === 'empty') return <MonthlyState icon={<CheckCircle className="h-5 w-5" />} title="This month has no imported sales yet" message="Use Import Sales to add POS, Grab, FoodPanda, Shopee, or Apps reports." />
 
   return <section className="space-y-4">
+    {isRefreshing && <p role="status" className="flex items-center gap-2 text-xs font-medium text-slate-500"><RefreshCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />Refreshing imported sales…</p>}
+    {refreshError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">Could not refresh imported sales. Showing the last loaded figures. {refreshError}</p>}
     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-      Imported coverage only; not a reconciled full-month corporate total. POS includes all channels, so platform reports are not added to it. Only imports accessible to your account are included.
+      Imported coverage only; not a reconciled full-month corporate total. POS includes all channels, so platform reports are not added to it. Only imports belonging to your organization are included.
       <p className="mt-2">POS coverage: {overview.counts.myUsPizza} MY US Pizza + {overview.counts.sabah} Sabah + {overview.posUnmapped} unresolved names = {overview.counts.all} outlet groups. Unresolved names remain in All until mapped; aliases count once per canonical outlet.</p>
     </div>
     {mappingError && <p role="alert" className="text-sm text-red-700">{mappingError}</p>}
     <OutletMappingPanel rows={rows} mappings={mappings} onSave={saveMappings} />
+    <ImportReviewPanel organizationId={scope.selected?.organizationId ?? null} reportingMonth={reportingMonth} refreshToken={refreshToken} />
     {section === 'overview' ? <OverviewPage entityFilter={entityFilter} channelFilter={channelFilter} onEntityFilterChange={onEntityFilterChange} imported={overview} period={period} />
       : section === 'salesByOutlet' ? <TableCard title={`Sales by outlet · ${period}`} subtitle="Imported all-channel POS net sales before SST, grouped by canonical outlet. Unmapped source names are shown separately." rows={overview.outlets.map(o => [o.name, money(o.net)])} />
       : section === 'coverage' ? <TableCard title={`Imported coverage · ${period}`} subtitle="Record counts are source rows, not necessarily orders. File completeness and duplicate checks are pending." rows={overview.coverage.map(c => [sourceName(c.source), `${c.records.toLocaleString()} records · ${c.days} dates · ${c.outlets} outlet names`])} />

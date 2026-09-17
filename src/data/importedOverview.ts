@@ -1,5 +1,5 @@
 import { ENTITY_NAMES, PLATFORMS, PLATFORM_LABELS, type EntityScope, type OverviewAggregate, type PlatformAggregate } from './aggregate'
-import { EMPTY_MAPPINGS, outletNameKey, resolveOutlet, type OutletMappings } from './outletMaster'
+import { EMPTY_MAPPINGS, isSisterBrand, outletNameKey, resolveOutlet, type OutletMappings } from './outletMaster'
 
 export type OverviewValues = { [K in Exclude<keyof OverviewAggregate, 'byPlatform'>]: number | null } & {
   byPlatform: Array<{ [K in keyof PlatformAggregate]: PlatformAggregate[K] extends number ? number | null : PlatformAggregate[K] }>
@@ -8,12 +8,12 @@ export interface ImportedRow {
   sales_date: string
   outlet_name: string
   source: string
-  gross_sales: number | string
-  discount: number | string
-  net_sales: number | string
-  tax: number | string
-  service_charge: number | string
-  payout: number | string
+  gross_sales: number | string | null
+  discount: number | string | null
+  net_sales: number | string | null
+  tax: number | string | null
+  service_charge: number | string | null
+  payout: number | string | null
   record_count: number
 }
 const round = (n: number) => Math.round(n * 100) / 100
@@ -23,12 +23,16 @@ export const sumKnown = (values: Array<number | null>): number | null =>
 export function importedOverview(rows: ImportedRow[], scope: EntityScope, mappings: OutletMappings = EMPTY_MAPPINGS) {
   const resolved = (r: ImportedRow) => resolveOutlet(r.source, r.outlet_name, mappings)
   const identity = (r: ImportedRow) => resolved(r)?.id ?? `unmapped:${r.source}:${outletNameKey(r.outlet_name)}`
-  const branded = rows.filter(r => /^us pizza\b/i.test(r.outlet_name.trim()))
-  const unmapped = [...new Set(branded.filter(r => !resolved(r)).map(r => r.outlet_name))].sort()
-  const posUnmapped = new Set(branded.filter(r => r.source === 'pos' && !resolved(r)).map(identity)).size
-  const scoped = branded.filter(r => scope === 'all' || resolved(r)?.entity === ENTITY_NAMES[scope])
+  // Sister brands are excluded; every other name stays in, mapped or not.
+  const ownBrand = rows.filter(r => !isSisterBrand(r.outlet_name))
+  const unmapped = [...new Set(ownBrand.filter(r => !resolved(r)).map(r => r.outlet_name))].sort()
+  const posUnmapped = new Set(ownBrand.filter(r => r.source === 'pos' && !resolved(r)).map(identity)).size
+  const scoped = ownBrand.filter(r => scope === 'all' || resolved(r)?.entity === ENTITY_NAMES[scope])
   const pos = scoped.filter(r => r.source === 'pos')
-  const sum = (input: ImportedRow[], key: keyof ImportedRow) => input.length ? round(input.reduce((total, row) => total + Number(row[key]), 0)) : null
+  // A value the source never provided is unknown, so the total is unknown too.
+  const sum = (input: ImportedRow[], key: keyof ImportedRow) =>
+    !input.length || input.some(row => row[key] === null) ? null
+      : round(input.reduce((total, row) => total + Number(row[key]), 0))
   const net = sum(pos, 'net_sales')
   const serviceCharge = sum(pos, 'service_charge')
   const tax = sum(pos, 'tax')
@@ -48,11 +52,11 @@ export function importedOverview(rows: ImportedRow[], scope: EntityScope, mappin
     })),
   }
   const counts = Object.fromEntries(['all', 'myUsPizza', 'sabah'].map(key => [key,
-    new Set(branded.filter(r => r.source === 'pos' && (key === 'all' || resolved(r)?.entity === ENTITY_NAMES[key as keyof typeof ENTITY_NAMES])).map(identity)).size,
+    new Set(ownBrand.filter(r => r.source === 'pos' && (key === 'all' || resolved(r)?.entity === ENTITY_NAMES[key as keyof typeof ENTITY_NAMES])).map(identity)).size,
   ])) as Record<EntityScope, number>
   const outlets = [...new Set(pos.map(identity))].map(id => {
     const group = pos.filter(r => identity(r) === id)
-    return { id, name: resolved(group[0])?.name ?? `${group[0].outlet_name} (unmapped)`, net: sum(group, 'net_sales')! }
+    return { id, name: resolved(group[0])?.name ?? `${group[0].outlet_name} (unmapped)`, net: sum(group, 'net_sales') }
   }).sort((a, b) => a.name.localeCompare(b.name))
   const coverage = PLATFORMS.map(source => {
     const sourceRows = scoped.filter(r => r.source === source)

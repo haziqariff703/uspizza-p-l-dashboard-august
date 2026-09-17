@@ -69,3 +69,31 @@ test('May still renders its existing metrics through the same Overview', () => {
   assert.match(html, /3,503,594/)
   assert.doesNotMatch(html, /Unavailable|NaN|Infinity/)
 })
+
+test('an unrecognised name is never dropped: it stays visible and out of the entity totals', () => {
+  // Real August names that the old "must start with US Pizza" gate discarded
+  // without counting or reporting them.
+  const rows = [{ ...pos, outlet_name: 'Wonder Kitchen Bhd' }, { ...pos, outlet_name: 'ST Rosyam Mall Klang' }]
+  const result = importedOverview(rows, 'all')
+  assert.deepEqual(result.unmapped, ['Wonder Kitchen Bhd'])
+  assert.equal(result.posUnmapped, 1)
+  assert.equal(result.counts.all, 2)
+  assert.equal(result.totals.net, 160)
+  assert.equal(importedOverview(rows, 'myUsPizza').totals.net, 80)
+})
+test('an operating-company prefix resolves only when the remainder names one outlet', () => {
+  assert.equal(resolveOutlet('grab', "Marshall's Co - Greenlane")?.name, 'Greenlane')
+  assert.equal(resolveOutlet('grab', "Marshall's Co - SS2")?.name, 'SS2')
+  // An abbreviation still needs a recorded alias, so nothing is guessed.
+  assert.equal(resolveOutlet('grab', "Marshall's Co - Jalan SS15"), undefined)
+  // Stripping the prefix must not hand a sister brand one of our outlets.
+  assert.equal(resolveOutlet('grab', 'The Manhattan FISH MARKET - Greenlane'), undefined)
+})
+test('a value the source never provided keeps the total unknown instead of zero', () => {
+  const shopeeShaped = { ...pos, tax: null, service_charge: null }
+  const result = importedOverview([shopeeShaped], 'all')
+  assert.equal(result.totals.net, 80)
+  assert.equal(result.totals.tax, null)
+  assert.equal(result.totals.serviceCharge, null)
+  assert.equal(result.totals.netSCTax, null)
+})

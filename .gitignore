@@ -7,4 +7,11 @@ coverage/
 .env*
 !.env.example
 
+# Personal AI-agent instructions — retained locally, never pushed.
+CLAUDE.md
+.claude/
+AGENTS.md
+CLAUDE_SIMPLE_PROTOTYPE_HANDOFF.md
+
 datasource/
+supabase/.temp/

@@ -1,56 +1,77 @@
-# Implementation checklist — 15 Sep 2026
+# Prototype implementation checklist — 17 September 2026
 
-## Done
+## Database status
 
-### 1. Simpler wording in sections 1, 2, 3
-- [x] Rewrote copy in `src/copy.ts` (overview / fees / coverage keys) into plain English
-- [x] Same for inline text in the three section files — e.g. "Provisional" → "Not final",
-      "Itemization" → "Listed", "Unexplained" → "Not explained"
-- [x] Sections 4–7 left alone
+- [x] Replaced the old public application schema on S&L_Dashboard with six simple tables: `outlets`, `outlet_aliases`, `sales_imports`, `sales_daily`, `purchases_imports`, and `purchases_daily`.
+- [x] Removed the organization, review, staging, approval, audit and fee-detail tables from `public`, including their RPCs and Storage policies.
+- [x] Removed all `prototype_*` table names.
+- [x] Enabled RLS on all six active tables. Each signed-in user can access only their own outlets/imports and related daily rows.
+- [x] Created private `sales-imports` and `purchases-imports` Storage buckets/policies.
+- [x] Preserved the removed records in private `migration_backup_20260917`: 5 imports and 5,849 daily sales rows. The backup is for recovery only and is not dashboard data.
+- [x] Ran rollback-only SQL fixtures for six-table inserts, exact money, nullable unknowns, cross-user isolation, foreign-outlet rejection and anonymous access.
 
-### 2. August data — planning
-- [x] Added a 6-phase implementation plan to `docs/AUGUST-DATA-CHECKLIST.md`
-      (outlet master → ingestion rules → aggregation → dashboard wiring → reconciliation → test/ship)
+Read `supabase/SIMPLE_SCHEMA.md` for the schema contract. Do not run the historical SQL files or call the old review/publication RPCs against the active database.
 
-### 3. August data — Phase 1 complete
-- [x] Built `scripts/data-import/phase1_outlet_master.py`; audit output in `datasource/_audit/` (gitignored)
-- [x] Hashed all 997 source files — no duplicates
-- [x] **Foodpanda 877 mystery solved**: 459 xlsx (order detail) + 418 pdf-only (daily totals, no line items)
-- [x] **Outlet master is stale**: 83 locations in the August data aren't in the 46-outlet list
-- [x] **Bug caught**: sister brand (Manhattan FISH MARKET) was matching our outlet codes by location name alone
-- [x] **Confirmed open**: Taman Connaught + Kota Damansara are trading, not "upcoming"
+## Application work
 
-### 4. August data — Phase 2 in progress
-- [x] Defined import rules for Grab, Foodpanda, Shopee, App and POS data
-- [x] Excluded non-US Pizza brands, including Manhattan FISH MARKET, before outlet matching
-- [x] Prevented POS totals and platform totals from being added together twice
-- [x] Added a canonical outlet master and source-name mapping controls
-- [x] Added local handling for unknown outlets and entity assignments instead of guessing
-- [x] Added tests for duplicate sales, missing values, sister-brand exclusion and outlet mapping
-- [x] Wired supported August POS figures into the May dashboard layout
-- [ ] Finalise the authoritative August outlet/entity master for the 83 unresolved locations
-- [ ] Connect the completed rules to the full Supabase document-ingestion workflow
-- [ ] Confirm that all source filename, sheet and row references are retained in the local audit output
+### 1. Remove retired organization/review code
 
-### 5. Section 3 UI polish
-- [x] Switched to shared shadcn components (Button / Badge / Card / Input)
-- [x] Added `src/components/ui/input.tsx` and an `info` Badge variant
-- [x] "✓ complete" → friendlier status badge with a real icon
-- [x] Fixed table header overlap — dropped logos for plain text, added `break-words`
+- [ ] Delete `src/lib/organization.ts` and `src/lib/organization.test.ts`.
+- [ ] Delete `src/lib/useOrganizationScope.ts`.
+- [ ] Delete `src/components/SalesDashboard/OrganizationControl.tsx`.
+- [ ] Delete `src/components/SalesDashboard/ImportReviewPanel.tsx`.
+- [ ] Remove their imports, props and UI from `SalesDashboard.tsx`.
+- [ ] Keep Supabase authentication. Clear imported-data cache when account changes or signs out.
 
-### 6. Moved the 7 sections to pages — merged (PR #7)
-- [x] `src/components/SalesDashboard/*Section.tsx` → `src/pages/<slug>/<Name>Page.tsx`
-- [x] Renamed exports `*Section` → `*Page`
-- [x] Deleted dead `GrossSalesByOutletSection.tsx`, fixed stale CLAUDE.md section 6
-- [x] Shell, `SectionHeading`, modals stayed in `components/`
-- [x] All 7 recorded as git renames (96–99%) so collaborators rebase cleanly
-- [x] `npm run lint` + `npm run build` pass
+### 2. Rewrite sales import
 
-## Open / next
+- [ ] Rewrite `SalesImportModal.tsx` to create `sales_imports`, upload to `sales-imports`, then insert parsed totals into `sales_daily`.
+- [ ] Remove calls to `sales_import_contract_version`, `set_sales_import_status`, `submit_sales_import`, review/publication RPCs, `reporting_periods`, `sales_import_rows`, `import_validation_issues` and `import_column_mappings`.
+- [ ] Preserve deterministic parser profiles and `src/lib/decimal.ts` exact decimal strings.
+- [ ] Store unavailable applicable monetary values as null.
+- [ ] Display unresolved outlet names for mapping; never silently omit them.
 
-- [ ] **Routing for the pages** — approach not decided yet (hash vs react-router)
-- [ ] **August Phase 2 still has blockers**: finalise the outlet master for the 83 unknowns and
-      connect the rules to the full Supabase ingestion workflow
-- [ ] Confirm the 4 likely spelling aliases (Dpulze, Lucerne Square/Penang, Ipoh Simee)
-- [ ] Still no August purchases/GRN source — purchases, GP and margin stay unavailable until found
-- [ ] `datasource/sales-purchases-august.zip` (58MB) never inspected — may hold the purchases data
+### 3. Move mapping to the simple database
+
+- [ ] Rewrite `OutletMappingPanel.tsx` to use `outlets` and `outlet_aliases`.
+- [ ] Remove mapping decisions stored in browser localStorage.
+- [ ] Require a user choice before creating a new outlet code/entity.
+
+### 4. Rewrite live sales views
+
+- [ ] Update `ImportedSalesSection.tsx` to join `sales_daily`, `sales_imports` and `outlets`.
+- [ ] Filter the parent import by reporting month; do not query removed `organization_id`, `is_current` or `sales_daily.reporting_month` columns.
+- [ ] Keep same-user/same-month refresh behaviour; never show old figures under another month or another signed-in account.
+- [ ] Remove the review panel from imported pages.
+
+### 5. Add purchases
+
+- [ ] Create a purchases import UI using `purchases_imports` and `purchases_daily`.
+- [ ] Query purchases joined to `purchases_imports` and `outlets` by reporting month.
+- [ ] Wire sections 5–7 to live purchases, gross profit and margin.
+- [ ] Render missing purchases as unavailable, not RM0.
+
+### 6. Verify
+
+- [ ] Run `npm run lint`.
+- [ ] Run `npm test`.
+- [ ] Run `npm run build`.
+- [ ] Browser-test signed-in sales import, alias creation, monthly filtering and sign-out cache clearing.
+- [ ] Browser-test second-user isolation.
+- [ ] Browser-test purchases import and gross-profit calculation once a GRN source is available.
+
+## Retired work — do not restore
+
+- Organization membership, invitations and role controls.
+- Reporting periods and their status events.
+- Staged import rows, validation issues and column mappings.
+- Independent review, approval, publishing and revision RPCs.
+- Published source-record ledger, fee lines and import/period audit events.
+- The old `2026-09-16-v1` application contract and its import safety fixtures.
+
+## Data notes
+
+- The static May dashboard remains a labelled demo.
+- August source parsing work remains useful: brand denylist, guarded operator-prefix handling, null propagation and no invented Shopee discount/SST.
+- POS and platform totals may overlap; do not combine them without Finance’s channel rule.
+- August outlet mappings and purchases coverage remain incomplete.
