@@ -5,8 +5,8 @@ Exactly six application tables remain in `public`:
 
 | Table | Fields and purpose |
 | --- | --- |
-| outlets | `id`, `name`, `code`, `entity`, `status`, `created_by`, `created_at`; one canonical outlet per user/code |
-| outlet_aliases | `id`, `outlet_id`, `source`, `alias`, `created_by`, `created_at`; source names linked to an owned outlet |
+| outlets | `id`, `name`, `code`, `entity`, `status`, `created_by`, `created_at`; one canonical outlet per uploader/code |
+| outlet_aliases | `id`, `outlet_id`, `source`, `alias`, `created_by`, `created_at`; source names linked to an uploader-owned outlet |
 | sales_imports | `id`, `reporting_month`, `source`, `file_name`, `status`, `created_by`, `created_at`; uploaded sales-file metadata |
 | sales_daily | `id`, `sales_import_id`, `outlet_id`, `sales_date`, financial amounts, `record_count`, `created_at`; one daily total per import/outlet/date |
 | purchases_imports | `id`, `reporting_month`, `file_name`, `status`, `created_by`, `created_at`; purchases-file metadata |
@@ -27,14 +27,16 @@ rows with GRN numbers are distinguished by that number.
 
 ## Access and files
 
-Supabase Auth remains. This simple version is user-owned: it does not share figures
-between accounts. RLS lets authenticated users manage their own outlets/imports;
-child records require ownership of both the referenced import and outlet.
-No anonymous table access is granted. No service keys belong in the browser.
+Supabase Auth remains. Dashboard data is shared between all authenticated accounts:
+any signed-in user can read outlets, mappings, import metadata and daily figures.
+RLS still lets only the original uploader manage its own outlets/imports; child
+records require ownership of both the referenced import and outlet. No anonymous
+table access is granted. No service keys belong in the browser.
 
 Private Storage buckets: `sales-imports` and `purchases-imports`.
 Upload new files at `<signed-in user UUID>/<import UUID>/<filename>` without upsert.
-Storage read/insert policies check the user UUID prefix.
+Storage read/insert policies check the user UUID prefix. Original source files stay
+private to their uploader; only the processed dashboard data is shared.
 Application code must handle partial imports and errors; the schema does not enforce
 the previous publication transaction, period locks or business-key deduplication.
 

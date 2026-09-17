@@ -69,8 +69,8 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
   const [message, setMessage] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState('')
-  // Figures are cached per signed-in user + month. A change of either is a
-  // different scope that must load its own data, never reuse another's.
+  // Imported figures are shared across every signed-in account, so the cache
+  // scope is the reporting month rather than the identity that uploaded them.
   const loadedScopeRef = useRef<string | null>(null)
 
   const reloadDirectory = () => { void loadOutletDirectory().then(setDirectory).catch(() => setDirectory(EMPTY_DIRECTORY)) }
@@ -82,7 +82,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
     const load = async () => {
       // A month change is known before any network call, so the previous
       // month's figures come off the screen immediately.
-      if (loadedScopeRef.current && !loadedScopeRef.current.endsWith(`|${reportingMonth}`)) {
+      if (loadedScopeRef.current && loadedScopeRef.current !== reportingMonth) {
         loadedScopeRef.current = null
         clear()
         setStatus('loading')
@@ -105,7 +105,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
         return
       }
 
-      const scope = `${auth.user.id}|${reportingMonth}`
+      const scope = reportingMonth
       const isInitialLoad = loadedScopeRef.current !== scope
       if (isInitialLoad) { clear(); setStatus('loading') } else { setIsRefreshing(true); setRefreshError('') }
 
@@ -184,7 +184,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
   const period = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(`${reportingMonth}-01T00:00:00`))
 
   if (status === 'loading') return <MonthlyState icon={<RefreshCircle className="h-5 w-5 animate-spin" />} title="Loading imported sales" message="Checking Supabase for this reporting month." />
-  if (status === 'needs-auth') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Sign in to see imported figures" message="Imported sales belong to the account that uploaded them. Sign in with that account to load this month." />
+  if (status === 'needs-auth') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Sign in to see imported figures" message="Sign in to view the shared dashboard data for this month." />
   if (status === 'error') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Could not load imported sales" message={message} />
   if (status === 'empty') return <MonthlyState icon={<CheckCircle className="h-5 w-5" />} title="This month has no imported sales yet" message="Use Import Sales to add POS, Grab, FoodPanda, Shopee, or Apps reports." />
 
@@ -192,7 +192,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
     {isRefreshing && <p role="status" className="flex items-center gap-2 text-xs font-medium text-slate-500"><RefreshCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />Refreshing imported sales…</p>}
     {refreshError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">Could not refresh imported sales. Showing the last loaded figures. {refreshError}</p>}
     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-      Imported coverage only; not a reconciled full-month corporate total. POS includes all channels, so platform reports are not added to it. Only imports belonging to your account are included.
+      Imported coverage only; not a reconciled full-month corporate total. POS includes all channels, so platform reports are not added to it. Data imported by any signed-in user is shown here.
       <p className="mt-2">POS coverage: {overview.counts.myUsPizza} MY US Pizza + {overview.counts.sabah} Sabah = {overview.counts.all} outlets.</p>
     </div>
     <OutletMappingPanel directory={directory} onChange={reloadDirectory} />
