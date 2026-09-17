@@ -10,7 +10,7 @@ The active Supabase test database uses six tables only. The previous organizatio
 
 1. Keep every amount as an exact decimal string while importing. Do not use JavaScript floating-point arithmetic for money.
 2. A missing applicable value is `null`, not RM0.
-3. Do not drop an unfamiliar outlet name. Ask the user to map it to an existing outlet or create a new outlet.
+3. Use the 44-outlet `PL_BY_OUTLET` list as the import authority. Resolve names/codes and existing source spelling variants automatically. Exclude unmatched/ambiguous names with a visible report; no manual outlet confirmation or creation step.
 4. Dashboard data is shared across signed-in users. The uploader retains management rights, while everyone authenticated can view the processed figures.
 5. May remains labelled static demo data. Imported months read Supabase data.
 6. Keep original source files in private Storage. Upload paths are `<user-id>/<import-id>/<filename>` without upsert.
@@ -35,7 +35,7 @@ Sales sources are `pos`, `grab`, `foodpanda`, `shopee` and `apps`. Import status
 3. Create a `sales_imports` record with status `draft`.
 4. Upload the source file to the private `sales-imports` bucket.
 5. Parse daily totals using `src/lib/salesImportParser.ts` and retain null values from unsupported source fields.
-6. Resolve every source outlet name through `outlet_aliases`; create or choose a canonical outlet where required.
+6. Automatically create missing P&L master database records, then resolve each source name against that master. Stored manual aliases do not override it. Merge source-name variants for the same outlet/date before saving. Save `outlet-resolution.json` beside each imported original file to record excluded daily totals.
 7. Insert the totals into `sales_daily` and change the import status to `imported`.
 8. Set status to `failed` and show an actionable message if the upload, parse or database write fails.
 
