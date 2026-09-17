@@ -12,8 +12,6 @@ import { copy } from '../../copy';
 import { SalesImportModal } from './SalesImportModal';
 import { ImportedSalesSection } from './ImportedSalesSection';
 import { AuthControl } from './AuthControl';
-import { OrganizationControl } from './OrganizationControl';
-import { useOrganizationScope } from '../../lib/useOrganizationScope';
 
 const REPORTING_MONTHS = [
   { value: '2026-05', label: 'May 2026', status: 'Sample data ready' },
@@ -49,9 +47,9 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [importRefreshToken, setImportRefreshToken] = useState(0);
+  // A sign-in, sign-out or account change bumps this token, which is what makes
+  // ImportedSalesSection drop the previous user's figures and reload its own.
   const handleSessionChange = useCallback(() => setImportRefreshToken((token) => token + 1), []);
-  // One explicitly selected organization for every query below.
-  const organizationScope = useOrganizationScope(importRefreshToken);
   const [reportingMonth, setReportingMonth] = useState<(typeof REPORTING_MONTHS)[number]['value']>('2026-05');
   const selectedMonth = REPORTING_MONTHS.find((month) => month.value === reportingMonth) ?? REPORTING_MONTHS[0];
   const hasDashboardData = reportingMonth === '2026-05';
@@ -101,8 +99,6 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
             <span>Import Sales</span>
           </button>
 
-          <OrganizationControl scope={organizationScope} onChange={handleSessionChange} />
-
           <AuthControl onSessionChange={handleSessionChange} />
 
           <button
@@ -132,7 +128,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
 
       {isImportOpen && (
         <SalesImportModal
-          scope={organizationScope}
+          reportingMonth={reportingMonth}
           onClose={() => setIsImportOpen(false)}
           onComplete={(message) => {
             setImportNotice(message);
@@ -142,7 +138,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
         />
       )}
 
-      {!hasDashboardData && <ImportedSalesSection scope={organizationScope} reportingMonth={reportingMonth} refreshToken={importRefreshToken} entityFilter={entityFilter} channelFilter={channelFilter} section={section} onEntityFilterChange={onEntityFilterChange} />}
+      {!hasDashboardData && <ImportedSalesSection reportingMonth={reportingMonth} refreshToken={importRefreshToken} entityFilter={entityFilter} channelFilter={channelFilter} section={section} onEntityFilterChange={onEntityFilterChange} />}
 
       {/* Section Views */}
       {hasDashboardData && section === 'overview' && (

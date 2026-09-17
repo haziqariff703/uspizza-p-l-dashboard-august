@@ -8,6 +8,9 @@ export interface ImportedRow {
   sales_date: string
   outlet_name: string
   source: string
+  /** Set when the row arrives already joined to a canonical outlet. */
+  outlet_id?: string | null
+  entity?: string | null
   gross_sales: number | string | null
   discount: number | string | null
   net_sales: number | string | null
@@ -21,7 +24,11 @@ export const sumKnown = (values: Array<number | null>): number | null =>
   values.some(v => v === null) ? null : round(values.reduce<number>((total, value) => total + value!, 0))
 
 export function importedOverview(rows: ImportedRow[], scope: EntityScope, mappings: OutletMappings = EMPTY_MAPPINGS) {
-  const resolved = (r: ImportedRow) => resolveOutlet(r.source, r.outlet_name, mappings)
+  // A row that the database already joined to an outlet carries its own identity
+  // and legal entity. Name matching is only for rows that arrive without one.
+  const resolved = (r: ImportedRow) => r.outlet_id && r.entity
+    ? { id: r.outlet_id, name: r.outlet_name, entity: r.entity }
+    : resolveOutlet(r.source, r.outlet_name, mappings)
   const identity = (r: ImportedRow) => resolved(r)?.id ?? `unmapped:${r.source}:${outletNameKey(r.outlet_name)}`
   // Sister brands are excluded; every other name stays in, mapped or not.
   const ownBrand = rows.filter(r => !isSisterBrand(r.outlet_name))
