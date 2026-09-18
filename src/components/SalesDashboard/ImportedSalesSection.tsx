@@ -6,6 +6,10 @@ import { outletProfitability, type PurchaseRow } from '../../data/importedPurcha
 import { coverageTotals, importedCoverage, COVERAGE_STATE_LABELS } from '../../data/importedCoverage'
 import { EMPTY_DIRECTORY, loadOutletDirectory, type OutletDirectory } from '../../lib/outletDirectory'
 import { OverviewPage } from '../../pages/overview/OverviewPage'
+import { SalesByOutletPage } from '../../pages/sales-by-outlet/SalesByOutletPage'
+import { PurchasesByOutletPage } from '../../pages/purchases-by-outlet/PurchasesByOutletPage'
+import { PurchasesToNetSalesPage } from '../../pages/purchases-to-net-sales/PurchasesToNetSalesPage'
+import { PLByOutletPage, type PLDisplayOutlet } from '../../pages/pl-by-outlet/PLByOutletPage'
 import { ENTITY_NAMES, type EntityScope } from '../../data/aggregate'
 import { type ChannelFilter, type DashboardSection } from '../../types'
 
@@ -18,8 +22,6 @@ interface ImportedSalesSectionProps {
   onEntityFilterChange?: (filter: EntityScope) => void
 }
 
-const money = (value: number | null) => value === null ? 'Unavailable' : `RM ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-const percent = (value: number | null) => value === null ? 'Unavailable' : `${value.toFixed(1)}%`
 const sourceName = (source: string) => source === 'foodpanda' ? 'FoodPanda' : source === 'pos' ? 'POS' : source.charAt(0).toUpperCase() + source.slice(1)
 const PAGE_SIZE = 1000
 
@@ -49,6 +51,7 @@ interface JoinedPurchaseRow {
   outlets: JoinedOutlet | null
 }
 interface ImportStatusRow { source: string; file_name: string; status: string; created_at: string }
+interface GRNOutletTotal { branch_code: string; branch_name: string; total_purchase: number | string }
 
 /** Reads one table a page at a time, so a full month is never silently truncated. */
 async function readAll<T>(page: (from: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
@@ -113,6 +116,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
 
       try {
         const month = `${reportingMonth}-01`
+        const monthEnd = new Date(Number(reportingMonth.slice(0, 4)), Number(reportingMonth.slice(5, 7)), 0).toISOString().slice(0, 10)
         const [sales, bought, imported] = await Promise.all([
           readAll<JoinedSalesRow>(from => supabase
             .from('sales_daily')
@@ -126,17 +130,10 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
             .order('sales_date', { ascending: true })
             .order('outlet_id', { ascending: true })
             .range(from, from + PAGE_SIZE - 1)),
-          readAll<JoinedPurchaseRow>(from => supabase
-            .from('purchases_daily')
-            .select(`
-              purchase_date, purchase_amount, grn_number, supplier_name, outlet_id,
-              outlets ( name, code, entity ),
-              purchases_imports!inner ( reporting_month )
-            `)
-            .eq('purchases_imports.reporting_month', month)
-            .order('purchase_date', { ascending: true })
-            .order('outlet_id', { ascending: true })
-            .range(from, from + PAGE_SIZE - 1)),
+          supabase.rpc('get_purchases_by_outlet', { p_start_date: month, p_end_date: monthEnd }).then(({ data, error }) => {
+            if (error) throw new Error(error.message)
+            return (data ?? []) as GRNOutletTotal[]
+          }),
           // Failed and draft imports leave no sales_daily rows at all, so they
           // would otherwise vanish instead of showing as an actionable gap.
           (async () => {
@@ -165,11 +162,11 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           record_count: row.record_count,
         })))
         setPurchases(bought.map(row => ({
-          purchase_date: row.purchase_date,
-          outlet_id: row.outlet_id,
-          outlet_name: row.outlets?.name ?? 'Unnamed outlet',
-          entity: row.outlets?.entity ?? null,
-          purchase_amount: row.purchase_amount,
+          purchase_date: month,
+          outlet_id: row.branch_code,
+          outlet_name: row.branch_name,
+          entity: row.branch_code.startsWith('SB-') ? 'Sabah' : 'MY US PIZZA',
+          purchase_amount: row.total_purchase,
         })))
         setImports(imported)
         setStatus(sales.length || bought.length || imported.length ? 'ready' : 'empty')
@@ -190,10 +187,48 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
   }, [reportingMonth, refreshToken])
 
   const overview = useMemo(() => importedOverview(rows, entityFilter), [rows, entityFilter])
-  const profitability = useMemo(() => outletProfitability(
-    overview.outlets,
-    purchases.filter(row => entityFilter === 'all' || row.entity === ENTITY_NAMES[entityFilter]),
-  ), [overview.outlets, purchases, entityFilter])
+  const profitability = useMemo(() => {
+    const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const salesIdByName = new Map(overview.outlets.map(outlet => [key(outlet.name), outlet.id]))
+    const normalizedPurchases = purchases
+      .filter(row => entityFilter === 'all' || row.entity === ENTITY_NAMES[entityFilter])
+      .map(row => ({ ...row, outlet_id: salesIdByName.get(key(row.outlet_name)) ?? row.outlet_id }))
+    return outletProfitability(overview.outlets, normalizedPurchases)
+  }, [overview.outlets, purchases, entityFilter])
+  // Keep section 7 on the same detailed P&L screen for every month. The
+  // selected reporting month only changes these inputs, never the layout.
+  const importedPLOutlets = useMemo<PLDisplayOutlet[]>(() => {
+    const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const salesIdByName = new Map(overview.outlets.map(outlet => [key(outlet.name), outlet.id]))
+    const directoryById = new Map<string, OutletDirectory['outlets'][number]>(directory.outlets.map(outlet => [outlet.id, outlet]))
+    const platformTotals = new Map<string, Record<string, number>>()
+
+    for (const row of rows) {
+      const outletId = row.outlet_id ?? salesIdByName.get(key(row.outlet_name))
+      if (!outletId) continue
+      const platform = sourceName(row.source)
+      const current = platformTotals.get(outletId) ?? {}
+      current[platform] = (current[platform] ?? 0) + Number(row.net_sales ?? 0)
+      platformTotals.set(outletId, current)
+    }
+
+    return profitability.map(outlet => {
+      const directoryOutlet = directoryById.get(outlet.id)
+      const netSales = Number(outlet.net ?? 0)
+      const totalPurchases = Number(outlet.purchases ?? 0)
+      const grossProfit = netSales - totalPurchases
+      return {
+        name: outlet.name,
+        code: directoryOutlet?.code ?? outlet.id,
+        entity: directoryOutlet?.entity ?? (outlet.id.startsWith('SB-') ? 'Sabah' : 'MY US PIZZA'),
+        netSales,
+        purchases: totalPurchases,
+        grossProfit,
+        marginPct: netSales > 0 ? (grossProfit / netSales) * 100 : 0,
+        platforms: platformTotals.get(outlet.id) ?? {},
+      }
+    })
+  }, [directory.outlets, overview.outlets, profitability, rows])
   // Section 3 reads what actually landed: rows per outlet and source, plus the
   // import statuses, so a failed file is a state rather than an absence.
   const coverage = useMemo(() => importedCoverage({
@@ -221,15 +256,15 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
       <p className="mt-2">POS coverage: {overview.counts.myUsPizza} MY US Pizza + {overview.counts.sabah} Sabah = {overview.counts.all} outlets.</p>
     </div>
     {section === 'overview' ? <OverviewPage entityFilter={entityFilter} channelFilter={channelFilter} onEntityFilterChange={onEntityFilterChange} imported={overview} period={period} />
-      : section === 'salesByOutlet' ? <TableCard title={`Sales by outlet · ${period}`} subtitle="Imported all-channel POS net sales before SST, by canonical outlet." headers={['Outlet', 'Net sales']} rows={overview.outlets.map(o => [o.name, money(o.net)])} />
+      : section === 'salesByOutlet' ? <SalesByOutletPage entityFilter={entityFilter} importedRows={rows} period={period} />
       : section === 'coverage' ? <div className="space-y-4">
           <TableCard title={`Channel coverage · ${period}`} subtitle="Outlets per state, by source. Imported means rows landed; Unavailable means no rows were imported for the outlet/source; Failed means this month's import did not finish. Nothing here claims a reconciled month." headers={['Source', 'Imported', 'Failed', 'Unavailable']} rows={coverageTotals(coverage).map(entry => [entry.source === 'grn' ? 'GRN / purchases' : sourceName(entry.source), String(entry.counts.imported), String(entry.counts.failed), String(entry.counts.unavailable)])} />
           <TableCard title={`Outlet coverage · ${period}`} subtitle="Every outlet this account owns, and what each source delivered for it. Record counts are source rows, not necessarily orders." headers={['Outlet', 'POS', 'Grab', 'FoodPanda', 'Shopee', 'Apps', 'GRN']} rows={coverage.map(outlet => [outlet.name, ...outlet.cells.map(cell => cell.state === 'imported' && cell.records ? `${COVERAGE_STATE_LABELS[cell.state]} · ${cell.records.toLocaleString()} / ${cell.days}d` : COVERAGE_STATE_LABELS[cell.state])])} />
           <TableCard title="Import status" subtitle="Every sales file uploaded for this month, most recent first. A draft or failed import contributed no figures above." headers={['File', 'Source', 'Status']} rows={imports.length ? imports.map(i => [i.file_name, sourceName(i.source), i.status]) : [['No imports yet', '—', '—']]} />
         </div>
-      : section === 'purchasesByOutlet' ? <TableCard title={`Purchases by outlet · ${period}`} subtitle="Imported GRN purchase totals. An outlet with no imported purchases stays unavailable; it is not RM 0." headers={['Outlet', 'Purchases']} rows={profitability.map(o => [o.name, money(o.purchases)])} />
-      : section === 'purchasesToNetSales' ? <TableCard title={`Purchases to net sales · ${period}`} subtitle="Both figures must be imported before a ratio exists." headers={['Outlet', 'Net sales', 'Purchases', 'Purchases % of net']} rows={profitability.map(o => [o.name, money(o.net), money(o.purchases), o.margin === null ? 'Unavailable' : percent(100 - o.margin)])} />
-      : section === 'plByOutlet' ? <TableCard title={`P&L by outlet · ${period}`} subtitle="Gross profit is net sales minus purchases. Neither is assumed when a source did not supply it." headers={['Outlet', 'Net sales', 'Purchases', 'Gross profit', 'Margin']} rows={profitability.map(o => [o.name, money(o.net), money(o.purchases), money(o.grossProfit), percent(o.margin)])} />
+      : section === 'purchasesByOutlet' ? <PurchasesByOutletPage entityFilter={entityFilter} importedPurchases={purchases} period={period} />
+      : section === 'purchasesToNetSales' ? <PurchasesToNetSalesPage entityFilter={entityFilter} selectedMonth={reportingMonth} />
+      : section === 'plByOutlet' ? <PLByOutletPage entityFilter={entityFilter} outletsOverride={importedPLOutlets} period={period} />
       : <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Commission and fees unavailable" message="The imported fee and payout fields require source reconciliation. Shopee commission and bank settlement are not supplied by the order export." />}
   </section>
 }

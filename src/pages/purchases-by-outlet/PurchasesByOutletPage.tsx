@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { PL_BY_OUTLET } from '../../data/outletData';
+import type { PurchaseRow } from '../../data/importedPurchases';
 
 const money = (value: number) => `RM ${Math.abs(value).toLocaleString()}`;
 type EntityFilter = 'all' | 'myUsPizza' | 'sabah';
@@ -44,15 +45,36 @@ const PurchaseLabel = ({
   );
 };
 
-/** Section 5, real GRN purchases per outlet — ported from docs/original-capture.html. */
-export const PurchasesByOutletPage: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
-  const rows = useMemo(
-    () =>
-      PL_BY_OUTLET.filter((outlet) =>
-        entityFilter === 'all' ? true : entityFilter === 'sabah' ? outlet.entity === 'Sabah' : outlet.entity === 'MY US PIZZA'
-      ).sort((a, b) => b.purchases - a.purchases),
-    [entityFilter]
-  );
+interface PurchasesByOutletPageProps {
+  entityFilter: EntityFilter;
+  /** GRN purchases for the selected imported month. */
+  importedPurchases?: PurchaseRow[];
+  period?: string;
+}
+
+/** Section 5, GRN purchases ranked by outlet. */
+export const PurchasesByOutletPage: React.FC<PurchasesByOutletPageProps> = ({ entityFilter, importedPurchases, period }) => {
+  const rows = useMemo(() => {
+    if (importedPurchases) {
+      const totals = new Map<string, { name: string; purchases: number }>();
+      for (const purchase of importedPurchases) {
+        if (entityFilter === 'sabah' && purchase.entity !== 'Sabah') continue;
+        if (entityFilter === 'myUsPizza' && purchase.entity !== 'MY US PIZZA') continue;
+        // An absent amount is unknown, not a RM 0 purchase.
+        if (purchase.purchase_amount === null) continue;
+        const current = totals.get(purchase.outlet_id) ?? { name: purchase.outlet_name, purchases: 0 };
+        current.purchases += Number(purchase.purchase_amount);
+        totals.set(purchase.outlet_id, current);
+      }
+      return [...totals.entries()]
+        .map(([id, row]) => ({ id, ...row }))
+        .sort((a, b) => b.purchases - a.purchases);
+    }
+
+    return PL_BY_OUTLET.filter((outlet) =>
+      entityFilter === 'all' ? true : entityFilter === 'sabah' ? outlet.entity === 'Sabah' : outlet.entity === 'MY US PIZZA'
+    ).sort((a, b) => b.purchases - a.purchases);
+  }, [entityFilter, importedPurchases]);
 
   const totalPurchases = rows.reduce((sum, o) => sum + o.purchases, 0);
 
@@ -64,7 +86,9 @@ export const PurchasesByOutletPage: React.FC<{ entityFilter: EntityFilter }> = (
         </span>
         <div>
           <h2 className="text-lg font-extrabold tracking-tight text-slate-900">Purchases by Outlet</h2>
-          <p className="text-xs text-slate-500">Goods received (GRN) per outlet · {money(totalPurchases)} total</p>
+          <p className="text-xs text-slate-500">
+            {period ? `Imported GRN purchases · ${period}` : 'Goods received (GRN) per outlet'} · {money(totalPurchases)} total
+          </p>
         </div>
       </div>
 
