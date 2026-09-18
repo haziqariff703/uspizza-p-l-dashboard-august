@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { addAmounts, amount, amountsToJson, AMOUNT_ABSENT, AMOUNT_UNKNOWN, parseDecimal, subtractAmounts } from './decimal'
+import { addAmounts, amount, amountsToJson, AMOUNT_ABSENT, AMOUNT_UNKNOWN, parseDecimal, subtractAmounts, taxFromInclusive } from './decimal'
 
 // app_private.sales_amount accepts only this shape; anything else aborts publication.
 const CONTRACT = /^-?[0-9]+(\.[0-9]+)?$/
@@ -51,4 +51,20 @@ test('the three states map onto the JSON contract distinctly', () => {
   assert.equal(json.tax, null)
   // No contribution at all: the key is absent, so it is not counted as applicable.
   assert.equal('advertisingSpend' in json, false)
+})
+
+test('6% SST inside a tax-inclusive amount rounds half-up to the sen', () => {
+  // 17.24 × 6 ÷ 106 = 0.97585…, and the pre-tax remainder stays exact.
+  assert.deepEqual(taxFromInclusive(amount('17.24')), amount('0.98'))
+  assert.deepEqual(subtractAmounts(amount('17.24'), taxFromInclusive(amount('17.24'))), amount('16.26'))
+  assert.deepEqual(taxFromInclusive(amount('106')), amount('6.00'))
+  assert.deepEqual(taxFromInclusive(amount('0')), amount('0.00'))
+  // A refund keeps its sign rather than rounding towards zero.
+  assert.deepEqual(taxFromInclusive(amount('-17.24')), amount('-0.98'))
+  const calculated = taxFromInclusive(amount('45.84'))
+  assert.match(calculated.kind === 'value' ? calculated.value : '', CONTRACT)
+})
+test('an unknown taxable basis can never produce a calculated tax', () => {
+  assert.deepEqual(taxFromInclusive(AMOUNT_UNKNOWN), AMOUNT_UNKNOWN)
+  assert.deepEqual(taxFromInclusive(AMOUNT_ABSENT), AMOUNT_ABSENT)
 })

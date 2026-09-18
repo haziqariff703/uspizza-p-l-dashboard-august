@@ -96,6 +96,37 @@ export function subtractAmounts(from: Amount, ...rest: Amount[]): Amount {
   return amount(format({ units: units.slice(1).reduce((total, value) => total - value, units[0]), scale }))
 }
 
+/** Rounds |n| / d half-up, keeping the sign. */
+const divideHalfUp = (n: bigint, d: bigint): bigint => {
+  const negative = n < 0n
+  const magnitude = negative ? -n : n
+  const rounded = (magnitude * 2n + d) / (d * 2n)
+  return negative ? -rounded : rounded
+}
+
+const toSen = (value: Decimal): bigint => {
+  const { units, scale } = toScaled(value)
+  return scale <= 2
+    ? units * 10n ** BigInt(2 - scale)
+    : divideHalfUp(units, 10n ** BigInt(scale - 2))
+}
+
+/**
+ * value × numerator ÷ denominator, half-up to the sen. A non-value Amount
+ * passes through unchanged, so an unknown basis can never produce a figure.
+ */
+export function scaleAmount(value: Amount, numerator: bigint, denominator: bigint): Amount {
+  if (value.kind !== 'value') return value
+  return amount(format({ units: divideHalfUp(toSen(value.value) * numerator, denominator), scale: 2 }))
+}
+
+/**
+ * SST at 6% already contained in a tax-inclusive amount. Used where an export
+ * states a tax-inclusive transaction amount but no separate tax column, per the
+ * owner's confirmed 6% rule.
+ */
+export const taxFromInclusive = (value: Amount): Amount => scaleAmount(value, 6n, 106n)
+
 /** Builds the `normalized_row_json` money keys: value → string, unknown → null,
  *  absent → key omitted. */
 export function amountsToJson(fields: Record<string, Amount>): Record<string, Decimal | null> {

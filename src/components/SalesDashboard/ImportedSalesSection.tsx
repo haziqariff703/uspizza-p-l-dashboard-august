@@ -6,6 +6,11 @@ import { outletProfitability, type PurchaseRow } from '../../data/importedPurcha
 import { coverageTotals, importedCoverage, COVERAGE_STATE_LABELS } from '../../data/importedCoverage'
 import { EMPTY_DIRECTORY, loadOutletDirectory, type OutletDirectory } from '../../lib/outletDirectory'
 import { OverviewPage } from '../../pages/overview/OverviewPage'
+import { SalesByOutletPage } from '../../pages/sales-by-outlet/SalesByOutletPage'
+import { PurchasesByOutletPage } from '../../pages/purchases-by-outlet/PurchasesByOutletPage'
+import { PurchasesToNetSalesPage } from '../../pages/purchases-to-net-sales/PurchasesToNetSalesPage'
+import { importedFeesViewModel } from '../../data/importedFees'
+import { FeesSection } from '../../pages/fees/FeesSection'
 import { ENTITY_NAMES, type EntityScope } from '../../data/aggregate'
 import { type ChannelFilter, type DashboardSection } from '../../types'
 
@@ -38,7 +43,7 @@ interface JoinedSalesRow {
   record_count: number
   outlet_id: string
   outlets: JoinedOutlet | null
-  sales_imports: { reporting_month: string; source: string } | null
+  sales_imports: { reporting_month: string; source: string; status: string } | null
 }
 interface JoinedPurchaseRow {
   purchase_date: string
@@ -120,9 +125,10 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
               sales_date, gross_sales, discount, net_sales, tax, service_charge,
               platform_fees, advertising_spend, payout, record_count, outlet_id,
               outlets ( name, code, entity ),
-              sales_imports!inner ( reporting_month, source )
+              sales_imports!inner ( reporting_month, source, status )
             `)
             .eq('sales_imports.reporting_month', month)
+            .eq('sales_imports.status', 'imported')
             .order('sales_date', { ascending: true })
             .order('outlet_id', { ascending: true })
             .range(from, from + PAGE_SIZE - 1)),
@@ -154,6 +160,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           sales_date: row.sales_date,
           outlet_name: row.outlets?.name ?? 'Unnamed outlet',
           outlet_id: row.outlet_id,
+          outlet_code: row.outlets?.code ?? null,
           entity: row.outlets?.entity ?? null,
           source: row.sales_imports?.source ?? '',
           gross_sales: row.gross_sales,
@@ -161,6 +168,8 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           net_sales: row.net_sales,
           tax: row.tax,
           service_charge: row.service_charge,
+          platform_fees: row.platform_fees,
+          advertising_spend: row.advertising_spend,
           payout: row.payout,
           record_count: row.record_count,
         })))
@@ -204,6 +213,17 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
     purchaseOutletIds: purchases.map(row => row.outlet_id),
   }), [directory, rows, imports, purchases, entityFilter])
   const period = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(`${reportingMonth}-01T00:00:00`))
+  // Section 2 reads the same loaded rows as every other section. The live
+  // adapter turns them into the shared fee view-model; a failed/draft file is
+  // surfaced as a coverage state rather than silently ignored.
+  const fees = useMemo(() => importedFeesViewModel(
+    rows,
+    channelFilter,
+    entityFilter,
+    period,
+    overview.unmapped.length,
+    imports.filter(item => item.status !== 'imported').map(item => ({ source: item.source, status: item.status })),
+  ), [rows, channelFilter, entityFilter, period, overview.unmapped.length, imports])
 
   if (status === 'loading') return <MonthlyState icon={<RefreshCircle className="h-5 w-5 animate-spin" />} title="Loading imported sales" message="Checking Supabase for this reporting month." />
   if (status === 'needs-auth') return <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Sign in to see imported figures" message="Sign in to view the shared dashboard data for this month." />
@@ -221,16 +241,16 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
       <p className="mt-2">POS coverage: {overview.counts.myUsPizza} MY US Pizza + {overview.counts.sabah} Sabah = {overview.counts.all} outlets.</p>
     </div>
     {section === 'overview' ? <OverviewPage entityFilter={entityFilter} channelFilter={channelFilter} onEntityFilterChange={onEntityFilterChange} imported={overview} period={period} />
-      : section === 'salesByOutlet' ? <TableCard title={`Sales by outlet · ${period}`} subtitle="Imported all-channel POS net sales before SST, by canonical outlet." headers={['Outlet', 'Net sales']} rows={overview.outlets.map(o => [o.name, money(o.net)])} />
+      : section === 'salesByOutlet' ? <SalesByOutletPage entityFilter={entityFilter} importedRows={rows} period={period} />
       : section === 'coverage' ? <div className="space-y-4">
           <TableCard title={`Channel coverage · ${period}`} subtitle="Outlets per state, by source. Imported means rows landed; Unavailable means no rows were imported for the outlet/source; Failed means this month's import did not finish. Nothing here claims a reconciled month." headers={['Source', 'Imported', 'Failed', 'Unavailable']} rows={coverageTotals(coverage).map(entry => [entry.source === 'grn' ? 'GRN / purchases' : sourceName(entry.source), String(entry.counts.imported), String(entry.counts.failed), String(entry.counts.unavailable)])} />
           <TableCard title={`Outlet coverage · ${period}`} subtitle="Every outlet this account owns, and what each source delivered for it. Record counts are source rows, not necessarily orders." headers={['Outlet', 'POS', 'Grab', 'FoodPanda', 'Shopee', 'Apps', 'GRN']} rows={coverage.map(outlet => [outlet.name, ...outlet.cells.map(cell => cell.state === 'imported' && cell.records ? `${COVERAGE_STATE_LABELS[cell.state]} · ${cell.records.toLocaleString()} / ${cell.days}d` : COVERAGE_STATE_LABELS[cell.state])])} />
           <TableCard title="Import status" subtitle="Every sales file uploaded for this month, most recent first. A draft or failed import contributed no figures above." headers={['File', 'Source', 'Status']} rows={imports.length ? imports.map(i => [i.file_name, sourceName(i.source), i.status]) : [['No imports yet', '—', '—']]} />
         </div>
-      : section === 'purchasesByOutlet' ? <TableCard title={`Purchases by outlet · ${period}`} subtitle="Imported GRN purchase totals. An outlet with no imported purchases stays unavailable; it is not RM 0." headers={['Outlet', 'Purchases']} rows={profitability.map(o => [o.name, money(o.purchases)])} />
-      : section === 'purchasesToNetSales' ? <TableCard title={`Purchases to net sales · ${period}`} subtitle="Both figures must be imported before a ratio exists." headers={['Outlet', 'Net sales', 'Purchases', 'Purchases % of net']} rows={profitability.map(o => [o.name, money(o.net), money(o.purchases), o.margin === null ? 'Unavailable' : percent(100 - o.margin)])} />
+      : section === 'purchasesByOutlet' ? <PurchasesByOutletPage entityFilter={entityFilter} importedPurchases={purchases} period={period} />
+      : section === 'purchasesToNetSales' ? <PurchasesToNetSalesPage entityFilter={entityFilter} importedRows={profitability} period={period} />
       : section === 'plByOutlet' ? <TableCard title={`P&L by outlet · ${period}`} subtitle="Gross profit is net sales minus purchases. Neither is assumed when a source did not supply it." headers={['Outlet', 'Net sales', 'Purchases', 'Gross profit', 'Margin']} rows={profitability.map(o => [o.name, money(o.net), money(o.purchases), money(o.grossProfit), percent(o.margin)])} />
-      : <MonthlyState icon={<WarningTriangle className="h-5 w-5" />} title="Commission and fees unavailable" message="The imported fee and payout fields require source reconciliation. Shopee commission and bank settlement are not supplied by the order export." />}
+      : <FeesSection model={fees} channelFilter={channelFilter} />}
   </section>
 }
 

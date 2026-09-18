@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { PL_BY_OUTLET } from '../../data/outletData';
+import type { OutletProfit } from '../../data/importedPurchases';
 
 type EntityFilter = 'all' | 'myUsPizza' | 'sabah';
 
@@ -12,13 +13,25 @@ const PurchaseLabel = ({ x = 0, y = 0, width = 0, height = 0, value }: { x?: num
   ) : null
 );
 
-export const PurchasesToNetSalesPage: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
+interface PurchasesToNetSalesPageProps {
+  entityFilter: EntityFilter;
+  /** Already scoped to the selected imported month and entity. */
+  importedRows?: OutletProfit[];
+  period?: string;
+}
+
+export const PurchasesToNetSalesPage: React.FC<PurchasesToNetSalesPageProps> = ({ entityFilter, importedRows, period }) => {
   const rows = useMemo(
-    () => PL_BY_OUTLET
-      .filter((outlet) => entityFilter === 'all' ? true : entityFilter === 'sabah' ? outlet.entity === 'Sabah' : outlet.entity === 'MY US PIZZA')
-      .map((outlet) => ({ ...outlet, purchaseRate: (outlet.purchases / outlet.netSales) * 100 }))
-      .sort((a, b) => b.purchaseRate - a.purchaseRate),
-    [entityFilter]
+    () => importedRows
+      ? importedRows
+        .filter((outlet) => outlet.net !== null && outlet.net !== 0 && outlet.purchases !== null)
+        .map((outlet) => ({ name: outlet.name, purchases: outlet.purchases!, purchaseRate: (outlet.purchases! / outlet.net!) * 100 }))
+        .sort((a, b) => b.purchaseRate - a.purchaseRate)
+      : PL_BY_OUTLET
+        .filter((outlet) => entityFilter === 'all' ? true : entityFilter === 'sabah' ? outlet.entity === 'Sabah' : outlet.entity === 'MY US PIZZA')
+        .map((outlet) => ({ ...outlet, purchaseRate: (outlet.purchases / outlet.netSales) * 100 }))
+        .sort((a, b) => b.purchaseRate - a.purchaseRate),
+    [entityFilter, importedRows]
   );
 
   return (
@@ -27,7 +40,7 @@ export const PurchasesToNetSalesPage: React.FC<{ entityFilter: EntityFilter }> =
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white shadow-2xs">6</span>
         <div>
           <h2 className="text-lg font-extrabold tracking-tight text-slate-900">Purchases-to-Net Sales</h2>
-          <p className="text-xs text-slate-500">Purchases ÷ net sales × 100 · lower is more efficient</p>
+          <p className="text-xs text-slate-500">{period ? `Imported purchases ÷ net sales · ${period}` : 'Purchases ÷ net sales × 100'} · lower is more efficient</p>
         </div>
       </div>
 

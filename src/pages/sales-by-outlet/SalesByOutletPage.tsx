@@ -13,6 +13,7 @@ import {
 import { PLATFORM_BRAND } from '../../platformColors';
 import { FULL_OUTLET_SALES } from '../../data/fullOutletSales';
 import { PL_BY_OUTLET } from '../../data/outletData';
+import type { ImportedRow } from '../../data/importedOverview';
 
 type Metric = 'gross' | 'discount' | 'net' | 'netSc' | 'netScTax';
 type ViewMode = 'total' | 'platform';
@@ -77,11 +78,67 @@ const PlatformLegend = () => (
   </div>
 );
 
-export const SalesByOutletPage: React.FC<{ entityFilter: EntityFilter }> = ({ entityFilter }) => {
+interface SalesByOutletPageProps {
+  entityFilter: EntityFilter;
+  /** When supplied, the chart uses the selected month's imported daily rows. */
+  importedRows?: ImportedRow[];
+  period?: string;
+}
+
+const IMPORT_SOURCE_TO_PLATFORM: Record<string, PlatformKey> = {
+  grab: 'Grab',
+  foodpanda: 'FoodPanda',
+  shopee: 'Shopee',
+  apps: 'Apps',
+  pos: 'POS',
+};
+
+export const SalesByOutletPage: React.FC<SalesByOutletPageProps> = ({ entityFilter, importedRows, period }) => {
   const [metric, setMetric] = useState<Metric>('gross');
   const [viewMode, setViewMode] = useState<ViewMode>('platform');
 
   const rows: Row[] = useMemo(() => {
+    if (importedRows) {
+      const metricKey: keyof Pick<ImportedRow, 'gross_sales' | 'discount' | 'net_sales' | 'service_charge' | 'tax'> =
+        metric === 'gross' ? 'gross_sales' : metric === 'discount' ? 'discount' : 'net_sales';
+      const outletRows = new Map<string, { id: string; name: string; platforms: Record<PlatformKey, number>; posTotal: number; hasPos: boolean }>();
+
+      for (const imported of importedRows) {
+        if (entityFilter === 'sabah' && imported.entity !== 'Sabah') continue;
+        if (entityFilter === 'myUsPizza' && imported.entity !== 'MY US PIZZA') continue;
+        const platform = IMPORT_SOURCE_TO_PLATFORM[imported.source.toLowerCase()];
+        if (!platform) continue;
+        const id = imported.outlet_id ?? `${imported.source}:${imported.outlet_name}`;
+        const current = outletRows.get(id) ?? {
+          id,
+          name: imported.outlet_name,
+          platforms: { Grab: 0, FoodPanda: 0, Shopee: 0, Apps: 0, POS: 0 },
+          posTotal: 0,
+          hasPos: false,
+        };
+        const base = Number(imported[metricKey] ?? 0);
+        const serviceCharge = Number(imported.service_charge ?? 0);
+        const tax = Number(imported.tax ?? 0);
+        const value = metric === 'netSc' ? base + serviceCharge : metric === 'netScTax' ? base + serviceCharge + tax : base;
+        current.platforms[platform] += value;
+        if (platform === 'POS') {
+          current.posTotal += value;
+          current.hasPos = true;
+        }
+        outletRows.set(id, current);
+      }
+
+      return [...outletRows.values()]
+        .map((outlet) => ({
+          id: outlet.id,
+          name: outlet.name,
+          // POS is the trusted total because it already includes marketplace sales.
+          total: outlet.hasPos ? outlet.posTotal : PLATFORM_KEYS.reduce((sum, key) => sum + outlet.platforms[key], 0),
+          ...outlet.platforms,
+        }))
+        .sort((a, b) => b.total - a.total);
+    }
+
     const entityByCode = new Map(PL_BY_OUTLET.map((outlet) => [outlet.code, outlet.entity]));
     const platformOf = (o: (typeof FULL_OUTLET_SALES)[number]): Record<PlatformKey, number> => {
       const raw =
@@ -119,7 +176,7 @@ export const SalesByOutletPage: React.FC<{ entityFilter: EntityFilter }> = ({ en
       .map((o) => {
         return o;
       });
-  }, [entityFilter, metric]);
+  }, [entityFilter, importedRows, metric]);
 
   const getMetricTitle = () => {
     switch (metric) {
@@ -193,7 +250,9 @@ export const SalesByOutletPage: React.FC<{ entityFilter: EntityFilter }> = ({ en
         </span>
         <div>
           <h2 className="text-lg font-extrabold tracking-tight text-slate-900">Sales by Outlet</h2>
-          <p className="text-xs text-slate-500">Pick a metric and toggle the platform-stacked view</p>
+          <p className="text-xs text-slate-500">
+            {period ? `Imported sales · ${period}` : 'Pick a metric and toggle the platform-stacked view'}
+          </p>
         </div>
       </div>
 
@@ -243,7 +302,12 @@ export const SalesByOutletPage: React.FC<{ entityFilter: EntityFilter }> = ({ en
       </div>
 
       {/* Subtitle */}
-      <div className="text-xs font-bold text-slate-700">{getMetricTitle()}</div>
+      <div>
+        <div className="text-xs font-bold text-slate-700">{getMetricTitle()}</div>
+        {importedRows && viewMode === 'platform' && (
+          <p className="mt-1 text-[11px] text-slate-500">Platform bars show each imported source. POS is not added to the total because it already includes all channels.</p>
+        )}
+      </div>
 
       {/* Ranked horizontal bar list */}
       <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:p-4">

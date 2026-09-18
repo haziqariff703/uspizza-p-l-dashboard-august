@@ -11,9 +11,9 @@ const directory = (aliases: Record<string, string> = {}): OutletDirectory =>
   ({ outlets: [GREENLANE, SS2], aliases })
 
 const row = (outletId: string, source: string, date = '2026-08-01'): ImportedRow => ({
-  sales_date: date, outlet_name: 'Greenlane', outlet_id: outletId, entity: 'MY US PIZZA SDN BHD', source,
+  sales_date: date, outlet_name: 'Greenlane', outlet_id: outletId, outlet_code: null, entity: 'MY US PIZZA SDN BHD', source,
   gross_sales: '10', discount: null, net_sales: '10', tax: null, service_charge: null,
-  payout: null, record_count: 4,
+  platform_fees: null, advertising_spend: null, payout: null, record_count: 4,
 })
 
 const cell = (coverage: ReturnType<typeof importedCoverage>, outletId: string, source: string) =>

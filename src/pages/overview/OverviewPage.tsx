@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/badge';
 import { Separator } from '../../components/ui/separator';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { cn } from '../../lib/utils';
-import { sumKnown, type OverviewValues } from '../../data/importedOverview';
+import { DERIVED_CHARGES, sumKnown, type DerivedField, type OverviewValues } from '../../data/importedOverview';
 
 interface OverviewPageProps {
   entityFilter: EntityScope;
@@ -49,18 +49,33 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   /** Net sales per entity, for the scope toggle's tooltips. */
   const entityNet = useMemo(
     () =>
-      ({
-        all: totals,
-        myUsPizza: aggregate(scopeOutlets('myUsPizza')),
-        sabah: aggregate(scopeOutlets('sabah')),
-      }) as Record<EntityScope, { net: number }>,
-    [totals]
+      imported
+        // Imported tooltips read the live counts instead; no demo aggregate is
+        // computed under imported figures.
+        ? ({ all: totals, myUsPizza: { net: null }, sabah: { net: null } } as unknown as Record<EntityScope, { net: number }>)
+        : ({
+            all: totals,
+            myUsPizza: aggregate(scopeOutlets('myUsPizza')),
+            sabah: aggregate(scopeOutlets('sabah')),
+          }) as Record<EntityScope, { net: number }>,
+    [imported, totals]
   );
 
   // The original Overview always shows all five platforms — the channel filter
   // drives section 2, not this block. Highlight the column instead of hiding.
   const platforms = totals.byPlatform;
-  const settlementTotal = sumKnown(platforms.map(p => p.settlement));
+  // A platform with no settlement source must not blank out the platforms that
+  // have one: the shares are of the settlements actually reported, and the
+  // platforms without a payout source are named beneath the bar.
+  const settledPlatforms = platforms.filter(p => p.settlement !== null);
+  const settlementKnown = settledPlatforms.length ? sumKnown(settledPlatforms.map(p => p.settlement)) : null;
+  const unsettledLabels = platforms.filter(p => p.settlement === null && p.platform !== 'pos').map(p => p.label);
+  // POS is all-channel, so in imported mode the last column is the POS source,
+  // not a cross-platform total — a partial platform sum does not belong there.
+  const posPlatform = platforms.find(p => p.platform === 'pos');
+  const settlementTotal = imported ? posPlatform?.settlement ?? null : settlementKnown;
+  // A partial numerator over a full gross denominator would be a wrong ratio,
+  // not a partial one, so it stays unavailable rather than understating.
   const keptPctTotal = settlementTotal === null || totals.grossMenu === null ? null : totals.grossMenu > 0 ? (settlementTotal / totals.grossMenu) * 100 : 0;
 
   const barSegments = [
@@ -68,22 +83,29 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
     { key: 'sc', label: 'service charge', value: totals.serviceCharge, color: BASIS_COLORS.netSc },
     { key: 'sst', label: 'SST', value: totals.tax, color: BASIS_COLORS.netScTax },
     { key: 'discount', label: 'discount given up', value: totals.discount, color: '#FDA4AF' },
-  ].filter((seg) => seg.value > 1);
-  const barTotal = barSegments.reduce((sum, seg) => sum + seg.value, 0);
+  ].filter((seg) => seg.value !== null && seg.value > 1);
+  const barTotal = barSegments.reduce((sum, seg) => sum + (seg.value ?? 0), 0);
 
   /** Matrix rows: one derivation step, five platform columns, a total. */
   const matrixRows = [
-    { label: 'Gross sales', pick: (p: (typeof platforms)[number]) => p.grossMenu, total: totals.grossMenu, tone: 'text-slate-600' },
-    { label: '− Discount', pick: (p: (typeof platforms)[number]) => p.discount, total: totals.discount, tone: 'text-rose-600' },
-    { label: '+ Service charge', pick: (p: (typeof platforms)[number]) => p.serviceCharge, total: totals.serviceCharge, tone: 'text-sky-600' },
-    { label: '+ Tax (SST)', pick: (p: (typeof platforms)[number]) => p.tax, total: totals.tax, tone: 'text-teal-600' },
+    { label: 'Gross sales', field: null, pick: (p: (typeof platforms)[number]) => p.grossMenu, total: totals.grossMenu, tone: 'text-slate-600' },
+    { label: '− Discount', field: null, pick: (p: (typeof platforms)[number]) => p.discount, total: totals.discount, tone: 'text-rose-600' },
+    { label: '+ Service charge', field: 'serviceCharge', pick: (p: (typeof platforms)[number]) => p.serviceCharge, total: totals.serviceCharge, tone: 'text-sky-600' },
+    { label: '+ Tax (SST)', field: 'tax', pick: (p: (typeof platforms)[number]) => p.tax, total: totals.tax, tone: 'text-teal-600' },
     {
       label: '− Commission & fees',
+      field: null,
       pick: (p: (typeof platforms)[number]) => p.commissionAndFees,
       total: sumKnown(platforms.map(p => p.commissionAndFees)),
       tone: 'text-amber-600',
     },
-  ];
+  ] satisfies Array<{ label: string; field: DerivedField | null; pick: (p: (typeof platforms)[number]) => number | null; total: number | null; tone: string }>;
+  /** Only imported figures are derived; the May sample states every charge. */
+  const derived = (platform: string, field: DerivedField | null) =>
+    imported && field ? DERIVED_CHARGES.get(platform)?.fields.includes(field) ?? false : false;
+  const derivedNotes = imported
+    ? platforms.filter(p => DERIVED_CHARGES.has(p.platform)).map(p => DERIVED_CHARGES.get(p.platform)!.note)
+    : [];
 
   return (
     <Card className="overflow-hidden">
@@ -159,7 +181,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             {barSegments.map((seg) => (
               <div
                 key={seg.key}
-                style={{ width: `${(seg.value / barTotal) * 100}%`, background: seg.color }}
+                style={{ width: `${barTotal > 0 ? ((seg.value ?? 0) / barTotal) * 100 : 0}%`, background: seg.color }}
                 title={`${seg.label}: ${money(seg.value)}`}
                 className="transition-all duration-500 motion-reduce:transition-none"
               />
@@ -224,7 +246,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               Net Settlement by Platform
             </h3>
             <p className="text-xs text-slate-400">
-              What actually lands in the bank, and how each number is worked out from gross sales.
+              {imported ? 'Reported payouts and reconciliation from available sales bases.' : 'What actually lands in the bank, and how each number is worked out from gross sales.'}
             </p>
           </div>
 
@@ -238,7 +260,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               <div
                 key={p.platform}
                 style={{
-                  width: `${settlementTotal > 0 ? (p.settlement / settlementTotal) * 100 : 0}%`,
+                  width: `${settlementKnown !== null && p.settlement !== null && settlementKnown > 0 ? (p.settlement / settlementKnown) * 100 : 0}%`,
                   background: PLATFORM_BRAND[p.label] ?? '#64748B',
                 }}
                 title={`${p.label}: ${money(p.settlement)}`}
@@ -256,11 +278,17 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                 />
                 {p.label}
                 <span className="tabular-nums">
-                  {percent(settlementTotal === null ? null : settlementTotal > 0 ? (p.settlement / settlementTotal) * 100 : 0)}
+                  {percent(p.settlement === null || settlementKnown === null ? null : settlementKnown > 0 ? (p.settlement / settlementKnown) * 100 : 0)}
                 </span>
               </span>
             ))}
           </div>
+          {unsettledLabels.length > 0 && (
+            <p className="mt-1.5 text-[11px] text-amber-600">
+              Shares are of {money(settlementKnown)} in reported settlements. {unsettledLabels.join(' and ')} {unsettledLabels.length > 1 ? 'have' : 'has'} no
+              settlement source yet, so {unsettledLabels.length > 1 ? 'they are' : 'it is'} not in the bar.
+            </p>
+          )}
 
           <div className="mt-3 rounded-xl border border-slate-200">
             <Table className="min-w-[720px]">
@@ -297,12 +325,19 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                     </TableCell>
                     {platforms.map((p) => {
                       const isFiltered = channelFilter !== 'All' && channelFilter === p.label;
+                      const isDerived = derived(p.platform, row.field);
                       return (
                         <TableCell
                           key={p.platform}
                           className={cn('text-right tabular-nums text-slate-700', isFiltered && 'bg-slate-50/70')}
+                          title={isDerived ? DERIVED_CHARGES.get(p.platform)!.note : undefined}
                         >
                           {cell(row.pick(p))}
+                          {isDerived && (
+                            <span className="ml-1 text-[10px] font-semibold uppercase text-amber-600">
+                              {row.field === 'serviceCharge' ? 'calc 10%' : 'calc 6%'}
+                            </span>
+                          )}
                         </TableCell>
                       );
                     })}
@@ -353,7 +388,16 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
 
           <p className="mt-2 text-[11px] text-slate-400">
-            {imported ? 'Platform breakdown is incomplete. POS is all-channel and cannot be used as the POS-only column. Shopee Earnings includes a different tax basis and does not establish bank settlement. Missing charges are unavailable, not zero.' : "Commission & fees here is what's left over after the platform's cut (collected − settled), so it will not match section 2's detailed fee report — that is expected."}
+            {imported ? (
+              <>
+                Each column derives gross − discount = net, then + service charge + SST = collected, then − commission &amp; fees = settlement.
+                {derivedNotes.map(note => ` ${note}.`)}
+                {' '}Shopee and Foodpanda discount is the whole customer reduction, because both itemise promotions on a tax-inclusive basis.
+                {' '}Shopee&apos;s export carries no commission line, so its deduction row reflects only what the source states.
+                {' '}Apps settlement and fees stay unavailable until a bank-payout report exists — an order grand total is not money received.
+                {' '}Legacy Grab gross and pre-tax sales require source reconciliation. POS totals cover all channels, so no POS-only split is shown.
+              </>
+            ) : "Commission & fees here is what's left over after the platform's cut (collected − settled), so it will not match section 2's detailed fee report — that is expected."}
           </p>
         </section>
       </CardContent>

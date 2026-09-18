@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { Calendar as CalendarDays, CheckCircle as CheckCircle2, Download, Page as FileSpreadsheet, Spark as Sparkles, Upload } from 'iconoir-react';
 import { OverviewPage } from '../../pages/overview/OverviewPage';
-import { CommissionFeesPage } from '../../pages/fees/CommissionFeesPage';
+import { FeesSection } from '../../pages/fees/FeesSection';
+import { mayFeesViewModel } from '../../data/feesStaticAdapter';
 import { DataCoveragePage } from '../../pages/coverage/DataCoveragePage';
 import { SalesByOutletPage } from '../../pages/sales-by-outlet/SalesByOutletPage';
 import { PurchasesByOutletPage } from '../../pages/purchases-by-outlet/PurchasesByOutletPage';
@@ -154,7 +155,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
           onEntityFilterChange={onEntityFilterChange}
         />
       )}
-      {hasDashboardData && section === 'fees' && <CommissionFeesPage channelFilter={channelFilter} />}
+      {hasDashboardData && section === 'fees' && <FeesSection model={mayFeesViewModel()} channelFilter={channelFilter} />}
       {hasDashboardData && section === 'coverage' && <DataCoveragePage outlets={outlets} onGoToTasks={onGoToTasks} />}
       {hasDashboardData && section === 'salesByOutlet' && <SalesByOutletPage entityFilter={entityFilter} />}
       {hasDashboardData && section === 'purchasesByOutlet' && <PurchasesByOutletPage entityFilter={entityFilter} />}

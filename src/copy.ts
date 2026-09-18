@@ -39,7 +39,7 @@ export const copy = {
   overviewViewCalc: 'Show calculation',
   overviewHideCalc: 'Hide calculation',
 
-  // CommissionFeesPage
+  // Section 2 (FeesSection) — legacy strings, retained for reference
   feesGapIntro:
     'The fee report and the bank statements use different dates.',
   feesGapOutro: 'We need the original invoices to fix this.',
