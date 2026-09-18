@@ -10,6 +10,7 @@ import { PLByOutletPage } from '../../pages/pl-by-outlet/PLByOutletPage';
 import { ChannelFilter, DashboardSection, OutletFinancialData } from '../../types';
 import { copy } from '../../copy';
 import { SalesImportModal } from './SalesImportModal';
+import { GRNImportModal } from './GRNImportModal';
 import { ImportedSalesSection } from './ImportedSalesSection';
 import { AuthControl } from './AuthControl';
 
@@ -51,6 +52,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
 }) => {
   const [exportNotice, setExportNotice] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isGRNImportOpen, setIsGRNImportOpen] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [importRefreshToken, setImportRefreshToken] = useState(0);
   // A sign-in, sign-out or account change bumps this token, which is what makes
@@ -104,6 +106,9 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
             <Upload className="h-3.5 w-3.5" />
             <span>Import Sales</span>
           </button>
+          <button type="button" onClick={() => setIsGRNImportOpen(true)} className="flex items-center gap-1.5 rounded-lg border border-[#C8102E] bg-white px-3.5 py-1.5 text-xs font-bold text-[#C8102E] shadow-xs transition-colors hover:bg-rose-50" title="Import GRN purchase Excel file">
+            <Upload className="h-3.5 w-3.5" /><span>Import Purchases / GRN</span>
+          </button>
 
           <AuthControl onSessionChange={handleSessionChange} />
 
@@ -143,6 +148,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
           }}
         />
       )}
+      {isGRNImportOpen && <GRNImportModal onClose={() => setIsGRNImportOpen(false)} onComplete={(message) => { setIsGRNImportOpen(false); setImportNotice(message); setImportRefreshToken(token => token + 1); setTimeout(() => setImportNotice(null), 4000) }} />}
 
       {!hasDashboardData && <ImportedSalesSection reportingMonth={reportingMonth} refreshToken={importRefreshToken} entityFilter={entityFilter} channelFilter={channelFilter} section={section} onEntityFilterChange={onEntityFilterChange} />}
 

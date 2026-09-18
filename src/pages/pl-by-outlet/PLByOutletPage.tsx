@@ -4,22 +4,39 @@ import { PLATFORM_BRAND as PLATFORM_COLORS } from '../../platformColors';
 
 const money = (value: number) => `RM ${Math.abs(value).toLocaleString()}`;
 
-const marginColor = (pct: number) => (pct >= 60 ? '#16a34a' : '#65a30d');
+const marginColor = (pct: number) => (pct < 0 ? '#dc2626' : pct >= 60 ? '#16a34a' : '#65a30d');
+
+/** A month's P&L values. May uses the captured reference data; imported months
+ * pass this same shape so the layout never changes when the month changes. */
+export interface PLDisplayOutlet {
+  name: string;
+  code: string;
+  entity: string;
+  netSales: number;
+  purchases: number;
+  grossProfit: number;
+  marginPct: number;
+  platforms?: Record<string, number>;
+}
 
 interface PLByOutletPageProps {
   /** Outlet code to open on mount / when the navbar search jumps here. */
   selectedCode?: string | null;
   onSelectOutlet?: (code: string) => void;
   entityFilter: 'all' | 'myUsPizza' | 'sabah';
+  /** Monthly values from imported sales/GRN data. Omit for the May reference view. */
+  outletsOverride?: PLDisplayOutlet[];
+  period?: string;
 }
 
-export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, onSelectOutlet, entityFilter }) => {
+export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, onSelectOutlet, entityFilter, outletsOverride, period }) => {
+  const sourceOutlets = outletsOverride ?? PL_BY_OUTLET;
   const scopedOutlets = useMemo(
     () =>
-      PL_BY_OUTLET.filter((outlet) =>
+      sourceOutlets.filter((outlet) =>
         entityFilter === 'all' ? true : entityFilter === 'sabah' ? outlet.entity === 'Sabah' : outlet.entity === 'MY US PIZZA'
       ),
-    [entityFilter]
+    [entityFilter, sourceOutlets]
   );
   const sortedByProfit = useMemo(() => [...scopedOutlets].sort((a, b) => b.grossProfit - a.grossProfit), [scopedOutlets]);
   const byCode = useMemo(() => new Map(scopedOutlets.map((o) => [o.code, o])), [scopedOutlets]);
@@ -28,7 +45,7 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
     const netSales = scopedOutlets.reduce((sum, outlet) => sum + outlet.netSales, 0);
     const purchases = scopedOutlets.reduce((sum, outlet) => sum + outlet.purchases, 0);
     const grossProfit = scopedOutlets.reduce((sum, outlet) => sum + outlet.grossProfit, 0);
-    return { netSales, purchases, grossProfit, grossMargin: (grossProfit / netSales) * 100 };
+    return { netSales, purchases, grossProfit, grossMargin: netSales > 0 ? (grossProfit / netSales) * 100 : 0 };
   }, [scopedOutlets]);
 
   const [localCode, setLocalCode] = useState<string>(selectedCode || 'MY-030');
@@ -41,8 +58,9 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
 
   const outlet = byCode.get(localCode) || scopedOutlets[0];
   if (!outlet) return null;
-  const platforms = PLATFORM_DETAIL_BY_OUTLET[outlet.name];
-  const maxPlatform = platforms ? Math.max(...Object.values(platforms)) : 0;
+  const platforms = outlet.platforms ?? PLATFORM_DETAIL_BY_OUTLET[outlet.name];
+  const hasPlatforms = Boolean(platforms && Object.keys(platforms).length);
+  const maxPlatform = hasPlatforms ? Math.max(...(Object.values(platforms!) as number[])) : 0;
 
   const handleSelect = (code: string) => {
     setLocalCode(code);
@@ -80,7 +98,7 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
               </div>
             </div>
 
-            {platforms ? (
+            {hasPlatforms ? (
               <div className="space-y-1.5">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Net sales by platform</div>
                 {(Object.entries(platforms) as [string, number][]).map(([platform, value]) => (
@@ -92,7 +110,7 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                       <div
                         className="h-full rounded-full"
-                        style={{ width: `${(value / maxPlatform) * 100}%`, background: PLATFORM_COLORS[platform] }}
+                        style={{ width: `${maxPlatform ? (value / maxPlatform) * 100 : 0}%`, background: PLATFORM_COLORS[platform] }}
                       />
                     </div>
                     <span className="w-24 shrink-0 text-right text-sm font-medium tabular-nums text-slate-700">
@@ -209,7 +227,7 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
       </div>
 
       <p className="text-center text-xs text-slate-400">
-        Source: docs/original-capture.html · RM · {PL_BY_OUTLET.length} corporate outlets · 2 entities
+        {outletsOverride ? `Source: imported sales and GRN · ${period ?? 'selected month'} · RM · ${scopedOutlets.length} outlets` : `Source: docs/original-capture.html · RM · ${PL_BY_OUTLET.length} corporate outlets · 2 entities`}
       </p>
     </div>
   );
