@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { PL_BY_OUTLET } from '../../data/outletData';
-import { getSupabaseClient } from '../../lib/supabase';
+import type { OutletProfit } from '../../data/importedPurchases';
 
 type EntityFilter = 'all' | 'myUsPizza' | 'sabah';
 
@@ -13,19 +13,25 @@ const PurchaseLabel = ({ x = 0, y = 0, width = 0, height = 0, value }: { x?: num
   ) : null
 );
 
-export interface PurchaseToNetSalesItem { outlet_id: string; outlet_name: string; outlet_code: string; total_purchases: number; total_net_sales: number; percentage: number }
-export function usePurchasesToNetSales(selectedMonth?: string) {
-  const [data, setData] = useState<PurchaseToNetSalesItem[] | null>(null); const [loading, setLoading] = useState(Boolean(selectedMonth));
-  useEffect(() => { if (!selectedMonth) return; let active = true; const end = new Date(Number(selectedMonth.slice(0,4)), Number(selectedMonth.slice(5,7)), 0).toISOString().slice(0,10); void getSupabaseClient().rpc('get_purchases_to_net_sales',{p_start_date:`${selectedMonth}-01`,p_end_date:end}).then(({data,error})=>{if(active){setData(error?[]:(data as PurchaseToNetSalesItem[]));setLoading(false)}}); return ()=>{active=false} }, [selectedMonth]);
-  return { data, loading };
+interface PurchasesToNetSalesPageProps {
+  entityFilter: EntityFilter;
+  /** Already scoped to the selected imported month and entity. */
+  importedRows?: OutletProfit[];
+  period?: string;
 }
-export const PurchasesToNetSalesPage: React.FC<{ entityFilter: EntityFilter; selectedMonth?: string }> = ({ entityFilter, selectedMonth }) => {
-  const { data: rpcRows, loading } = usePurchasesToNetSales(selectedMonth);
+
+export const PurchasesToNetSalesPage: React.FC<PurchasesToNetSalesPageProps> = ({ entityFilter, importedRows, period }) => {
   const rows = useMemo(
-    () => (rpcRows ?? PL_BY_OUTLET.map(outlet => ({ ...outlet, outlet_name: outlet.name, total_purchases: outlet.purchases, purchaseRate: (outlet.purchases / outlet.netSales) * 100 })))
-      .filter((outlet) => entityFilter === 'all' ? true : entityFilter === 'sabah' ? outlet.entity === 'Sabah' : outlet.entity === 'MY US PIZZA')
-      .map((outlet: any) => ({ ...outlet, name: outlet.outlet_name ?? outlet.name, purchases: Number(outlet.total_purchases ?? outlet.purchases), purchaseRate: Number(outlet.percentage ?? outlet.purchaseRate) }))
-      .sort((a, b) => b.purchaseRate - a.purchaseRate), [entityFilter, rpcRows]
+    () => importedRows
+      ? importedRows
+        .filter((outlet) => outlet.net !== null && outlet.net !== 0 && outlet.purchases !== null)
+        .map((outlet) => ({ name: outlet.name, purchases: outlet.purchases!, purchaseRate: (outlet.purchases! / outlet.net!) * 100 }))
+        .sort((a, b) => b.purchaseRate - a.purchaseRate)
+      : PL_BY_OUTLET
+        .filter((outlet) => entityFilter === 'all' ? true : entityFilter === 'sabah' ? outlet.entity === 'Sabah' : outlet.entity === 'MY US PIZZA')
+        .map((outlet) => ({ ...outlet, purchaseRate: (outlet.purchases / outlet.netSales) * 100 }))
+        .sort((a, b) => b.purchaseRate - a.purchaseRate),
+    [entityFilter, importedRows]
   );
 
   return (
@@ -34,11 +40,11 @@ export const PurchasesToNetSalesPage: React.FC<{ entityFilter: EntityFilter; sel
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white shadow-2xs">6</span>
         <div>
           <h2 className="text-lg font-extrabold tracking-tight text-slate-900">Purchases-to-Net Sales</h2>
-          <p className="text-xs text-slate-500">Purchases ÷ net sales × 100 · lower is more efficient</p>
+          <p className="text-xs text-slate-500">{period ? `Imported purchases ÷ net sales · ${period}` : 'Purchases ÷ net sales × 100'} · lower is more efficient</p>
         </div>
       </div>
 
-      {loading ? <div className="h-64 animate-pulse rounded-xl bg-slate-100" /> : <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:p-4">
+      <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:p-4">
         <div style={{ width: '100%', height: Math.max(rows.length * 30 + 80, 160) }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart layout="vertical" data={rows} margin={{ top: 8, right: 72, bottom: 8, left: 8 }} barCategoryGap="20%">
@@ -52,7 +58,7 @@ export const PurchasesToNetSalesPage: React.FC<{ entityFilter: EntityFilter; sel
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>}
+      </div>
 
       <div className="grid gap-3 text-xs sm:grid-cols-2">
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-900"><span className="font-bold">Lower %:</span> more cost-efficient purchasing.</div>

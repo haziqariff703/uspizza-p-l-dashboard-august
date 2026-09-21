@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { Calendar as CalendarDays, CheckCircle as CheckCircle2, Download, Page as FileSpreadsheet, Spark as Sparkles, Upload } from 'iconoir-react';
 import { OverviewPage } from '../../pages/overview/OverviewPage';
-import { CommissionFeesPage } from '../../pages/fees/CommissionFeesPage';
+import { FeesSection } from '../../pages/fees/FeesSection';
+import { mayFeesViewModel } from '../../data/feesStaticAdapter';
 import { DataCoveragePage } from '../../pages/coverage/DataCoveragePage';
 import { SalesByOutletPage } from '../../pages/sales-by-outlet/SalesByOutletPage';
 import { PurchasesByOutletPage } from '../../pages/purchases-by-outlet/PurchasesByOutletPage';
@@ -10,7 +11,6 @@ import { PLByOutletPage } from '../../pages/pl-by-outlet/PLByOutletPage';
 import { ChannelFilter, DashboardSection, OutletFinancialData } from '../../types';
 import { copy } from '../../copy';
 import { SalesImportModal } from './SalesImportModal';
-import { GRNImportModal } from './GRNImportModal';
 import { ImportedSalesSection } from './ImportedSalesSection';
 import { AuthControl } from './AuthControl';
 
@@ -52,7 +52,6 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
 }) => {
   const [exportNotice, setExportNotice] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [isGRNImportOpen, setIsGRNImportOpen] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [importRefreshToken, setImportRefreshToken] = useState(0);
   // A sign-in, sign-out or account change bumps this token, which is what makes
@@ -106,9 +105,6 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
             <Upload className="h-3.5 w-3.5" />
             <span>Import Sales</span>
           </button>
-          <button type="button" onClick={() => setIsGRNImportOpen(true)} className="flex items-center gap-1.5 rounded-lg border border-[#C8102E] bg-white px-3.5 py-1.5 text-xs font-bold text-[#C8102E] shadow-xs transition-colors hover:bg-rose-50" title="Import GRN purchase Excel file">
-            <Upload className="h-3.5 w-3.5" /><span>Import Purchases / GRN</span>
-          </button>
 
           <AuthControl onSessionChange={handleSessionChange} />
 
@@ -148,7 +144,6 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
           }}
         />
       )}
-      {isGRNImportOpen && <GRNImportModal onClose={() => setIsGRNImportOpen(false)} onComplete={(message) => { setIsGRNImportOpen(false); setImportNotice(message); setImportRefreshToken(token => token + 1); setTimeout(() => setImportNotice(null), 4000) }} />}
 
       {!hasDashboardData && <ImportedSalesSection reportingMonth={reportingMonth} refreshToken={importRefreshToken} entityFilter={entityFilter} channelFilter={channelFilter} section={section} onEntityFilterChange={onEntityFilterChange} />}
 
@@ -160,7 +155,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({
           onEntityFilterChange={onEntityFilterChange}
         />
       )}
-      {hasDashboardData && section === 'fees' && <CommissionFeesPage channelFilter={channelFilter} />}
+      {hasDashboardData && section === 'fees' && <FeesSection model={mayFeesViewModel()} channelFilter={channelFilter} />}
       {hasDashboardData && section === 'coverage' && <DataCoveragePage outlets={outlets} onGoToTasks={onGoToTasks} />}
       {hasDashboardData && section === 'salesByOutlet' && <SalesByOutletPage entityFilter={entityFilter} />}
       {hasDashboardData && section === 'purchasesByOutlet' && <PurchasesByOutletPage entityFilter={entityFilter} />}

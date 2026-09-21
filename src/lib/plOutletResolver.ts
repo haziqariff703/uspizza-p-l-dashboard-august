@@ -9,12 +9,28 @@ import { addAmounts, amount, AMOUNT_UNKNOWN } from './decimal'
 import { MONEY_KEYS } from './salesImportParser'
 import type { DailyTotal } from './salesDailyTotals'
 
-// Only the P&L list supplies membership, canonical names, codes and entities.
-export const PL_MASTER = PL_BY_OUTLET.map(row => ({
-  name: row.name, code: row.code,
-  entity: row.entity === 'Sabah' ? ENTITY_NAMES.sabah : ENTITY_NAMES.myUsPizza,
-  status: 'active' as const,
-}))
+/**
+ * Outlets that opened after the May 2026 P&L was cut. They have no May figures,
+ * so Section 7's May master (PL_BY_OUTLET) does not list them and is left
+ * untouched — but they trade in later months and their imported sales must
+ * count. Finance owns this list: adding a code here makes that outlet's sales
+ * count from whichever month its source files first carry it.
+ */
+const OPENED_SINCE_PL = [
+  { name: 'Taman Connaught', code: 'MY-051' },
+  { name: 'Kota Damansara', code: 'MY-081' },
+]
+
+// Membership, canonical names, codes and entities come from the P&L list plus
+// the outlets opened since it was cut. Nothing else is one of our outlets.
+export const PL_MASTER = [
+  ...PL_BY_OUTLET.map(row => ({
+    name: row.name, code: row.code,
+    entity: row.entity === 'Sabah' ? ENTITY_NAMES.sabah : ENTITY_NAMES.myUsPizza,
+    status: 'active' as const,
+  })),
+  ...OPENED_SINCE_PL.map(row => ({ ...row, entity: ENTITY_NAMES.myUsPizza, status: 'active' as const })),
+]
 
 export function planPlOutlets(stores: SourceStore[], directory: OutletDirectory): OutletPlan {
   const plan: OutletPlan = { stores: [], existing: [], approved: [], missing: [], conflicts: [], unresolved: [], excluded: [], invalid: [] }

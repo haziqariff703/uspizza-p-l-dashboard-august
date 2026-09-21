@@ -39,10 +39,10 @@ Read `supabase/SIMPLE_SCHEMA.md` for the schema contract. Do not run the histori
 
 ### 4. Rewrite live sales views
 
-- [ ] Update `ImportedSalesSection.tsx` to join `sales_daily`, `sales_imports` and `outlets`.
-- [ ] Filter the parent import by reporting month; do not query removed `organization_id`, `is_current` or `sales_daily.reporting_month` columns.
-- [ ] Keep same-user/same-month refresh behaviour; never show old figures under another month or another signed-in account.
-- [ ] Remove the review panel from imported pages.
+- [x] Update `ImportedSalesSection.tsx` to join `sales_daily`, `sales_imports` and `outlets`.
+- [x] Filter the parent import by reporting month; do not query removed `organization_id`, `is_current` or `sales_daily.reporting_month` columns.
+- [x] Keep same-user/same-month refresh behaviour; never show old figures under another month or another signed-in account.
+- [x] Remove the review panel from imported pages.
 
 ### 5. Add purchases
 

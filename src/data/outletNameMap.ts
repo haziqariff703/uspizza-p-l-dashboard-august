@@ -6,11 +6,13 @@ import type { AliasSource } from '../lib/outletDirectory'
  * similarity scoring: a name in here is that outlet, full stop.
  *
  * Scope is deliberately closed. Only the 46 HQ-owned outlets exist here — the 44
- * trading outlets from Section 7's P&L master plus the two pre-opening outlets.
- * Every other name a source file carries is not ours and is listed in
- * NON_HQ_SOURCE_NAMES below, so it is excluded once rather than reviewed monthly.
+ * trading outlets from Section 7's May P&L master plus Taman Connaught and Kota
+ * Damansara, which were pre-opening in May and have since opened. Every other
+ * name a source file carries is not ours and is listed in NON_HQ_SOURCE_NAMES
+ * below, so it is excluded once rather than reviewed monthly.
  *
- * Codes come from PL_BY_OUTLET / ORIGINAL_OUTLETS, which agree on all 44.
+ * Codes come from PL_BY_OUTLET / ORIGINAL_OUTLETS, which agree on all 44 May
+ * outlets; the two later openings are listed in PL_MASTER's OPENED_SINCE_PL.
  * Finance owns this file: adding an outlet here makes its sales count.
  */
 export interface HardcodedOutlet {
@@ -406,8 +408,14 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
   },
   {
     code: 'MY-033', name: 'Mydin Subang Jaya',
+    // One outlet, two names: POS files it under the district, the delivery
+    // platforms under "Mydin USJ". Confirmed by Finance as the same store.
     sources: {
       pos: ['US Pizza Mydin Subang Jaya'],
+      grab: ['US Pizza - Mydin USJ'],
+      foodpanda: ['US Pizza (Mydin USJ)'],
+      shopee: ['US Pizza - Mydin USJ'],
+      apps: ['US Pizza- Mydin USJ'],
     },
   },
   {
@@ -511,7 +519,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza - Lotus\'s Kepong',
     'US Pizza - Lucerne Bayan Lepas',
     'US Pizza - Melawati',
-    'US Pizza - Mydin USJ',
     'US Pizza - Nusa Bestari',
     'US Pizza - Presint 15 Putrajaya',
     'US Pizza - Prima Saujana',
@@ -555,7 +562,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza (Lucerne Square)',
     'US Pizza (Matahari Sri Manja)',
     'US Pizza (Melawati)',
-    'US Pizza (Mydin USJ)',
     'US Pizza (Senadin Miri)',
     'US Pizza (Setia Ecohill)',
     'US Pizza (Shah Alam)',
@@ -575,7 +581,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'The Manhattan FISH MARKET - Taman Connaught',
     'US Pizza - Kulim',
     'US Pizza - Melawati',
-    'US Pizza - Mydin USJ',
     'US Pizza - Sunshine Central',
     'US Pizza - Taiping',
   ],
@@ -613,7 +618,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza - Setia Ecohill',
     'US Pizza - Sunshine',
     'US Pizza - Wangsawalk',
-    'US Pizza- Mydin USJ',
     'Us Pizza - Kota Masai',
   ],
 }

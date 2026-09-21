@@ -7,6 +7,45 @@ export interface PurchaseRow {
   purchase_amount: number | string | null
 }
 
+export interface GRNPurchaseTotal {
+  outlet_id: string
+  outlet_name: string
+  outlet_code: string
+  outlet_entity: string | null
+  total_purchase: number | string | null
+}
+
+export function purchaseRowFromGRN(row: GRNPurchaseTotal, month: string): PurchaseRow {
+  if (!row.outlet_id || !row.outlet_name) throw new Error('GRN purchase response is missing its canonical outlet identity.')
+  return { purchase_date: month, outlet_id: row.outlet_id, outlet_name: row.outlet_name,
+    entity: row.outlet_entity, purchase_amount: row.total_purchase }
+}
+
+/** Maps the simple-schema join without requiring legacy GRN branch fields. */
+export function purchaseRowFromJoined(row: {
+  purchase_date: string
+  outlet_id: string
+  purchase_amount: PurchaseRow['purchase_amount']
+  outlets?: { name: string; entity: string | null } | null
+}): PurchaseRow {
+  return {
+    purchase_date: row.purchase_date,
+    outlet_id: row.outlet_id,
+    outlet_name: row.outlets?.name ?? 'Unnamed outlet',
+    entity: row.outlets?.entity ?? null,
+    purchase_amount: row.purchase_amount,
+  }
+}
+
+export function matchedProfitability(rows: OutletProfit[]) {
+  const matched = rows.filter(row => row.net !== null && row.purchases !== null)
+  const net = matched.length ? round(matched.reduce((sum, row) => sum + row.net!, 0)) : null
+  const purchases = matched.length ? round(matched.reduce((sum, row) => sum + row.purchases!, 0)) : null
+  const grossProfit = net !== null && purchases !== null ? round(net - purchases) : null
+  const margin = grossProfit !== null && net !== null && net !== 0 ? grossProfit / net * 100 : null
+  return { net, purchases, grossProfit, margin, matchedCount: matched.length, excludedCount: rows.length - matched.length }
+}
+
 export interface OutletProfit {
   id: string
   name: string

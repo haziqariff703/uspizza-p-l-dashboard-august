@@ -1,13 +1,13 @@
 import { isSisterBrand } from '../data/outletMaster'
 import {
-  addAmounts, amount, amountsToJson, AMOUNT_ABSENT, AMOUNT_UNKNOWN, parseDecimal, subtractAmounts,
-  type Amount, type Decimal,
+  addAmounts, amount, amountsToJson, AMOUNT_ABSENT, AMOUNT_UNKNOWN, parseDecimal, scaleAmount,
+  subtractAmounts, taxFromInclusive, type Amount, type Decimal,
 } from './decimal'
 
 export type SalesSource = 'POS' | 'Grab' | 'FoodPanda' | 'Shopee' | 'Apps'
 
 /** Bump when a profile's column mapping or arithmetic changes. Stored per import. */
-export const PARSER_VERSION = '2026-09-3'
+export const PARSER_VERSION = '2026-09-5'
 /** Bump when the outlet/alias rules change. Stored per import. */
 export const MAPPING_VERSION = '2026-09-1'
 
@@ -103,21 +103,21 @@ export const SOURCE_PROFILES: Record<Exclude<SalesSource, 'POS'>, SourceProfile>
     outletColumn: 'Store Name',
     // Category distinguishes a payment from an advertisement charge.
     identityColumns: ['Transaction ID', 'Category'],
-    readsColumns: ['Category', 'Net Sales', 'Total', 'Offer', 'Discount (Merchant-Funded)', 'Tax on Order Value', 'Amount', 'Order commission'],
+    readsColumns: ['Category', 'Net Sales', 'Total', 'Offer', 'Discount (Merchant-Funded)', 'Tax on Order Value', 'Restaurant Service Charge', 'Amount', 'Order commission'],
   },
   FoodPanda: {
     headerColumns: ['Order Date', 'Outlet Name'],
     dateColumn: 'Order Date',
     outletColumn: 'Outlet Name',
     identityColumns: ['Order Code'],
-    readsColumns: ['Products Value Paid By Customer', 'Voucher Paid By Vendor', 'Discount Paid By Vendor', 'Restaurant Revenue', 'foodpanda Commission', 'SST on foodpanda commission', 'Payable Amount'],
+    readsColumns: ['Products Value Paid By Customer', 'Restaurant Revenue', 'SST On Restaurant Revenue', 'foodpanda Commission', 'SST on foodpanda commission', 'Payable Amount'],
   },
   Shopee: {
     headerColumns: ['Complete Time', 'Store Name'],
     dateColumn: 'Complete Time',
     outletColumn: 'Store Name',
     identityColumns: ['Order ID'],
-    readsColumns: ['Order Status', 'Food original price', 'Earnings'],
+    readsColumns: ['Order Status', 'Food original price', 'Transaction Amount', 'Earnings'],
   },
   Apps: {
     headerColumns: ['Order Date', 'Outlet Name'],
@@ -138,6 +138,50 @@ export const POS_NO_IDENTITY: ParseIssue = {
 }
 
 const HEADER_SEARCH_DEPTH = 50
+
+/**
+ * The app's `Tax (RM)` column is not SST alone: it bundles 6% SST with the 10%
+ * dine-in service charge. August confirms the rates — every dine-in order
+ * charges 16% of the order value and no pickup or delivery order does — so the
+ * column is split by the share each rate contributes. `Order Type` is not used
+ * as the discriminator because the rate itself is the stronger evidence: some
+ * dine-in orders carry only one of the two charges, or neither.
+ */
+const APPS_SERVICE_CHARGE_RATE = 0.1
+const APPS_SST_RATE = 0.06
+/** Which of the two charges applied. Ordered most inclusive first. */
+const APPS_CHARGE_COMBINATIONS = [
+  { serviceCharge: true, tax: true },
+  { serviceCharge: true, tax: false },
+  { serviceCharge: false, tax: true },
+  { serviceCharge: false, tax: false },
+]
+/** A sen of rounding per component, so a two-component charge can differ by two. */
+const APPS_RATE_TOLERANCE = 0.03
+
+/**
+ * Splits the app's combined charges into service charge and SST. The two have
+ * different bases: the 10% service charge is on the order value alone, while
+ * the 6% SST also covers the delivery fee. A row whose charges match no
+ * combination of the contractual rates keeps both unknown rather than being
+ * forced into a split the source does not support.
+ */
+function splitAppsCharges(charges: Amount, orderValue: Amount, deliveryFee: Amount): { serviceCharge: Amount; tax: Amount } {
+  const unknown = { serviceCharge: AMOUNT_UNKNOWN, tax: AMOUNT_UNKNOWN }
+  if (charges.kind !== 'value' || orderValue.kind !== 'value' || deliveryFee.kind !== 'value') return unknown
+  // Classification only — it picks which charges applied, never a stored figure.
+  const value = Number(orderValue.value)
+  if (value < 0) return unknown
+  const total = Number(charges.value)
+  const delivery = Number(deliveryFee.value)
+  const applied = APPS_CHARGE_COMBINATIONS.find(combination => Math.abs(total
+    - (combination.serviceCharge ? value * APPS_SERVICE_CHARGE_RATE : 0)
+    - (combination.tax ? (value + delivery) * APPS_SST_RATE : 0)) <= APPS_RATE_TOLERANCE)
+  if (!applied) return unknown
+  const serviceCharge = applied.serviceCharge ? scaleAmount(orderValue, 1n, 10n) : amount('0')
+  // SST is the remainder, so the two parts always add back to the stated column.
+  return { serviceCharge, tax: subtractAmounts(charges, serviceCharge) }
+}
 
 const isoLocalDate = (value: Date) =>
   `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
@@ -283,6 +327,15 @@ export async function parseSalesFile(file: File, source: SalesSource, reportingM
     const value = parseDecimal(at(row, name))
     return value === undefined ? AMOUNT_ABSENT : amount(value)
   }
+  // A present, blank optional charge/discount column states no charge. A
+  // missing column stays unknown. Verified against the August order equations.
+  const optionalCharge = (row: unknown[], name: string): Amount => {
+    const value = cell(row, name)
+    const raw = at(row, name)
+    return value.kind === 'absent'
+      ? (raw === null || raw === undefined || raw === '' ? amount('0') : AMOUNT_UNKNOWN)
+      : value
+  }
   const feeLine = (row: unknown[], feeType: FeeLine['feeType'], amountColumn: string, taxColumn?: string): FeeLine[] => {
     const value = has(amountColumn) ? parseDecimal(at(row, amountColumn)) : undefined
     const taxValue = taxColumn && has(taxColumn) ? parseDecimal(at(row, taxColumn)) : undefined
@@ -320,16 +373,18 @@ export async function parseSalesFile(file: File, source: SalesSource, reportingM
     if (source === 'Grab') {
       const category = at(row, 'Category')
       if (category === 'Payment') {
-        const netSales = cell(row, 'Net Sales')
+        const collected = cell(row, 'Net Sales')
+        const tax = cell(row, 'Tax on Order Value')
+        const serviceCharge = optionalCharge(row, 'Restaurant Service Charge')
         const payout = cell(row, 'Total')
         return stage(normalizedRow(date, source, {
-          grossSales: netSales,
-          netSales,
+          grossSales: cell(row, 'Amount'),
+          netSales: subtractAmounts(collected, tax, serviceCharge),
           payout,
-          discount: addAmounts(cell(row, 'Offer'), cell(row, 'Discount (Merchant-Funded)')),
-          tax: cell(row, 'Tax on Order Value'),
+          discount: subtractAmounts(amount('0'), addAmounts(optionalCharge(row, 'Offer'), optionalCharge(row, 'Discount (Merchant-Funded)'))),
+          tax, serviceCharge,
           // Signed: a settlement larger than net sales is a real credit, not zero.
-          platformFees: subtractAmounts(netSales, payout),
+          platformFees: subtractAmounts(collected, payout),
         }, feeLine(row, 'commission', 'Order commission')), null)
       }
       if (category === 'Advertisement') {
@@ -342,21 +397,23 @@ export async function parseSalesFile(file: File, source: SalesSource, reportingM
     if (source === 'Shopee') {
       const status = at(row, 'Order Status')
       if (status !== 'Completed') return stage(null, `Order status "${String(status)}" is not Completed`)
-      // This export has no SST, service-charge or commission column, and
-      // `Earnings` is already net of Shopee's deductions — so it cannot define
-      // discount or net sales. Both stay unknown until Finance confirms the
-      // column mapping; see IMPLEMENTATION_CHECKLIST.md section 7.
-      // Explicitly unknown, not omitted: a food order really does carry SST, a
-      // service charge and Shopee commission, so the aggregate must report them
-      // as unknown rather than treating the month as having none.
+      // Shopee states no tax column, so SST is calculated at 6% inside the
+      // tax-inclusive Transaction Amount, per the owner's confirmed rule.
+      // Discount is gross − net rather than the itemised promotion columns:
+      // those reconcile to the tax-inclusive Transaction Amount, so using them
+      // would leave gross − discount ≠ net in the settlement derivation.
+      const collected = cell(row, 'Transaction Amount')
+      const tax = taxFromInclusive(collected)
+      const netSales = subtractAmounts(collected, tax)
+      const grossSales = cell(row, 'Food original price')
+      const payout = cell(row, 'Earnings')
       return stage(normalizedRow(date, source, {
-        grossSales: cell(row, 'Food original price'),
-        payout: cell(row, 'Earnings'),
-        discount: AMOUNT_UNKNOWN,
-        netSales: AMOUNT_UNKNOWN,
-        tax: AMOUNT_UNKNOWN,
-        serviceCharge: AMOUNT_UNKNOWN,
-        platformFees: AMOUNT_UNKNOWN,
+        grossSales, netSales, tax, payout,
+        discount: subtractAmounts(grossSales, netSales),
+        // Shopee's export carries no service-charge column and its surcharge
+        // field is nil across August, so no charge applies.
+        serviceCharge: amount('0'),
+        platformFees: subtractAmounts(collected, payout),
       }), null)
     }
 
@@ -366,22 +423,40 @@ export async function parseSalesFile(file: File, source: SalesSource, reportingM
       if (status !== 'Completed') return stage(null, `Status "${String(status)}" is not Completed`)
       if (payment !== 'Paid') return stage(null, `Payment status "${String(payment)}" is not Paid`)
       const grossSales = cell(row, 'Subtotal (RM)')
-      const tax = cell(row, 'Tax (RM)')
       const deliveryFee = cell(row, 'Delivery Fee (RM)')
-      const payout = cell(row, 'Grand Total (RM)')
-      const netSales = subtractAmounts(payout, tax, deliveryFee)
+      const collected = cell(row, 'Grand Total (RM)')
+      // Grand Total carries the order value, the delivery fee and the combined
+      // charges column, so net sales is the order value underneath all three —
+      // the same subtraction whichever charges applied.
+      const charges = cell(row, 'Tax (RM)')
+      const netSales = subtractAmounts(collected, charges, deliveryFee)
+      const { serviceCharge, tax } = splitAppsCharges(charges, netSales, deliveryFee)
       return stage(normalizedRow(date, source, {
-        grossSales, netSales, tax, payout,
+        grossSales, netSales, tax, serviceCharge,
+        // No settlement or bank-payout report exists for the app, and an order
+        // grand total is not money received. Fees cannot be derived without it.
+        payout: AMOUNT_UNKNOWN,
         discount: subtractAmounts(grossSales, netSales),
-        serviceCharge: deliveryFee,
       }, feeLine(row, 'delivery', 'Delivery Fee (RM)')), null)
     }
 
+    const revenue = cell(row, 'Restaurant Revenue')
+    // Restaurant Revenue is tax-inclusive. A stated SST wins; otherwise it is
+    // calculated at 6% inside that revenue. SST on foodpanda's own commission
+    // is a fee tax, never the customer's SST, so it never feeds this field.
+    const statedTax = cell(row, 'SST On Restaurant Revenue')
+    const tax = statedTax.kind === 'value' ? statedTax : taxFromInclusive(revenue)
+    const netSales = subtractAmounts(revenue, tax)
+    const grossSales = cell(row, 'Products Value Paid By Customer')
     return stage(normalizedRow(date, source, {
-      grossSales: cell(row, 'Products Value Paid By Customer'),
-      discount: addAmounts(cell(row, 'Voucher Paid By Vendor'), cell(row, 'Discount Paid By Vendor')),
-      netSales: cell(row, 'Restaurant Revenue'),
-      platformFees: addAmounts(cell(row, 'foodpanda Commission'), cell(row, 'SST on foodpanda commission')),
+      grossSales, netSales, tax,
+      // The whole customer reduction, including promotions this export does not
+      // itemise. Vendor voucher plus vendor discount reconciles to revenue but
+      // on the tax-inclusive basis, which would leave gross − discount ≠ net.
+      discount: subtractAmounts(grossSales, netSales),
+      // No foodpanda invoice appendix carries a service-charge column.
+      serviceCharge: amount('0'),
+      platformFees: subtractAmounts(revenue, cell(row, 'Payable Amount')),
       payout: cell(row, 'Payable Amount'),
     }, feeLine(row, 'commission', 'foodpanda Commission', 'SST on foodpanda commission')), null)
   })
