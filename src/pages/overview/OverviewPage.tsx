@@ -13,7 +13,7 @@ interface OverviewPageProps {
   entityFilter: EntityScope;
   channelFilter: ChannelFilter;
   onEntityFilterChange?: (filter: EntityScope) => void;
-  imported?: { totals: OverviewValues; counts: Record<EntityScope, number> };
+  imported?: { totals: OverviewValues; counts: Record<EntityScope, number>; profitabilityNote?: string };
   period?: string;
 }
 
@@ -22,12 +22,12 @@ interface OverviewPageProps {
  * en-MY, no fraction digits, and the sign preserved (per-outlet commission and
  * adjustments can be negative, so never Math.abs here).
  */
-const money = (value: number | null) => value === null ? 'Unavailable' :
+const money = (value: number | null) => value === null ? '—' :
   `RM ${value.toLocaleString('en-MY', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-const percent = (value: number | null, digits = 0) => value === null ? 'Unavailable' : `${value.toFixed(digits)}%`;
+const percent = (value: number | null, digits = 0) => value === null ? '—' : `${value.toFixed(digits)}%`;
 
 /** Sub-ringgit residue from summing float diffs reads as nothing, so show a dash. */
-const cell = (value: number | null) => value === null ? 'Unavailable' : (Math.abs(value) < 1 ? '—' : money(value));
+const cell = (value: number | null) => value === null ? '—' : (Math.abs(value) < 1 ? '—' : money(value));
 
 const ENTITY_TABS: { id: EntityScope; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -67,7 +67,8 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   // A platform with no settlement source must not blank out the platforms that
   // have one: the shares are of the settlements actually reported, and the
   // platforms without a payout source are named beneath the bar.
-  const settledPlatforms = platforms.filter(p => p.settlement !== null);
+  const sharePlatforms = imported ? platforms.filter(p => p.platform !== 'pos') : platforms;
+  const settledPlatforms = sharePlatforms.filter(p => p.settlement !== null);
   const settlementKnown = settledPlatforms.length ? sumKnown(settledPlatforms.map(p => p.settlement)) : null;
   const unsettledLabels = platforms.filter(p => p.settlement === null && p.platform !== 'pos').map(p => p.label);
   // POS is all-channel, so in imported mode the last column is the POS source,
@@ -90,13 +91,15 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   const matrixRows = [
     { label: 'Gross sales', field: null, pick: (p: (typeof platforms)[number]) => p.grossMenu, total: totals.grossMenu, tone: 'text-slate-600' },
     { label: '− Discount', field: null, pick: (p: (typeof platforms)[number]) => p.discount, total: totals.discount, tone: 'text-rose-600' },
+    { label: '= Net sales', field: null, pick: (p: (typeof platforms)[number]) => p.net, total: totals.net, tone: 'text-slate-900' },
     { label: '+ Service charge', field: 'serviceCharge', pick: (p: (typeof platforms)[number]) => p.serviceCharge, total: totals.serviceCharge, tone: 'text-sky-600' },
     { label: '+ Tax (SST)', field: 'tax', pick: (p: (typeof platforms)[number]) => p.tax, total: totals.tax, tone: 'text-teal-600' },
+    { label: '= Collected sales', field: null, pick: (p: (typeof platforms)[number]) => p.netSCTax, total: totals.netSCTax, tone: 'text-slate-900' },
     {
       label: '− Commission & fees',
       field: null,
       pick: (p: (typeof platforms)[number]) => p.commissionAndFees,
-      total: sumKnown(platforms.map(p => p.commissionAndFees)),
+      total: imported ? posPlatform?.commissionAndFees ?? null : sumKnown(platforms.map(p => p.commissionAndFees)),
       tone: 'text-amber-600',
     },
   ] satisfies Array<{ label: string; field: DerivedField | null; pick: (p: (typeof platforms)[number]) => number | null; total: number | null; tone: string }>;
@@ -135,7 +138,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                 type="button"
                 onClick={() => onEntityFilterChange?.(tab.id)}
                 aria-pressed={isActive}
-                title={imported ? `${counts[tab.id]} imported POS outlets` : `${counts[tab.id]} outlets · net sales ${money(entityNet[tab.id].net)}`}
+                title={imported ? `${counts[tab.id]} operating outlets` : `${counts[tab.id]} outlets · net sales ${money(entityNet[tab.id].net)}`}
                 className={cn(
                   'rounded-lg px-2.5 py-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-slate-400',
                   isActive ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
@@ -159,7 +162,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             <p className="mt-1 text-xs text-slate-400">{imported ? 'Imported POS coverage · all channels · before SST' : 'Menu price − discount'}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={totals.margin === null ? 'default' : 'positive'}>{percent(totals.margin, 1)} gross margin</Badge>
+            <Badge variant={totals.margin === null || totals.margin < 0 ? 'default' : 'positive'}>{percent(totals.margin, 1)} gross margin</Badge>
             <Badge>GP {money(totals.grossProfit)}</Badge>
           </div>
         </div>
@@ -218,13 +221,13 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         <section aria-label="Profitability">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
             {[
-              { label: 'Total Purchases', value: money(totals.purchases), note: imported ? 'August GRN source required' : 'GRN received', tone: 'text-slate-900' },
-              { label: 'Gross Profit', value: money(totals.grossProfit), note: 'Net − Purchases', tone: 'text-emerald-600' },
-              { label: 'Gross Margin', value: percent(totals.margin, 1), note: 'of net sales', tone: 'text-emerald-600' },
+              { label: 'Total Purchases', value: money(totals.purchases), note: imported ? 'Mapped GRN coverage' : 'GRN received', tone: 'text-slate-900' },
+              { label: 'Gross Profit', value: money(totals.grossProfit), note: imported ? 'Matched outlets: POS net − GRN' : 'Net − Purchases', tone: totals.grossProfit !== null && totals.grossProfit < 0 ? 'text-rose-600' : 'text-emerald-600' },
+              { label: 'Gross Margin', value: percent(totals.margin, 1), note: imported ? 'of matched-outlet POS net sales' : 'of net sales', tone: totals.margin !== null && totals.margin < 0 ? 'text-rose-600' : 'text-emerald-600' },
               {
                 label: 'Net after Commission',
                 value: money(totals.netAfterCommission),
-                note: imported ? 'Verified commission and settlement required' : `less ${money(totals.commission)} comm.`,
+                note: imported ? 'Itemized commission is not stored; combined fees are not commission.' : `less ${money(totals.commission)} comm.`,
                 tone: 'text-slate-900',
               },
             ].map((stat) => (
@@ -235,6 +238,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               </div>
             ))}
           </dl>
+          {imported?.profitabilityNote && <p className="mt-3 text-xs text-amber-600">{imported.profitabilityNote}</p>}
         </section>
 
         <Separator />
@@ -256,7 +260,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             role="img"
             aria-label={platforms.map((p) => `${p.label} ${money(p.settlement)}`).join(', ')}
           >
-            {platforms.map((p) => (
+            {sharePlatforms.map((p) => (
               <div
                 key={p.platform}
                 style={{
@@ -269,7 +273,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             ))}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400">
-            {platforms.map((p) => (
+            {sharePlatforms.map((p) => (
               <span key={p.platform} className="flex items-center gap-1.5">
                 <span
                   className="h-2 w-2 rounded-sm"
@@ -333,11 +337,6 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                           title={isDerived ? DERIVED_CHARGES.get(p.platform)!.note : undefined}
                         >
                           {cell(row.pick(p))}
-                          {isDerived && (
-                            <span className="ml-1 text-[10px] font-semibold uppercase text-amber-600">
-                              {row.field === 'serviceCharge' ? 'calc 10%' : 'calc 6%'}
-                            </span>
-                          )}
                         </TableCell>
                       );
                     })}
@@ -387,6 +386,18 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             </Table>
           </div>
 
+          <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+            <p className="font-semibold tabular-nums text-slate-800">
+              Gross sales − Discount + Service charge + SST − Commission &amp; fees = Net settlement
+            </p>
+            <p className="mt-1 text-slate-500">
+              Each platform column walks that same formula left to right, top to bottom: menu-price gross drops
+              the discount to reach net sales, adds back service charge and SST to reach what the platform
+              collected from the customer, then subtracts its commission and fees to reach what actually lands
+              in the bank.
+            </p>
+          </div>
+
           <p className="mt-2 text-[11px] text-slate-400">
             {imported ? (
               <>
@@ -395,7 +406,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                 {' '}Shopee and Foodpanda discount is the whole customer reduction, because both itemise promotions on a tax-inclusive basis.
                 {' '}Shopee&apos;s export carries no commission line, so its deduction row reflects only what the source states.
                 {' '}Apps settlement and fees stay unavailable until a bank-payout report exists — an order grand total is not money received.
-                {' '}Legacy Grab gross and pre-tax sales require source reconciliation. POS totals cover all channels, so no POS-only split is shown.
+                {' '}Legacy Grab gross and pre-tax sales require source reconciliation. POS shows all-channel sales and charges, not a POS-only split; it is excluded from platform settlement shares to avoid overlap. POS settlement remains unavailable without a payout source; collected sales are not bank receipts.
               </>
             ) : "Commission & fees here is what's left over after the platform's cut (collected − settled), so it will not match section 2's detailed fee report — that is expected."}
           </p>

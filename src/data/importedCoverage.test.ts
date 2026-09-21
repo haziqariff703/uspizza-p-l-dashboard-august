@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { coverageTotals, importedCoverage } from './importedCoverage'
+import { coverageTotals, importedCoverage, salesCoverage } from './importedCoverage'
 import { directoryKey, type OutletDirectory } from '../lib/outletDirectory'
 import type { ImportedRow } from './importedOverview'
 
@@ -64,6 +64,44 @@ test('an outlet with rows but missing from the directory is still shown, never h
   assert.equal(coverage.length, 1)
   assert.equal(coverage[0].id, 'ghost')
   assert.equal(cell(coverage, 'ghost', 'pos').state, 'imported')
+})
+
+test('an outlet carries its canonical code through to the matrix', () => {
+  const coverage = importedCoverage({ directory: directory(), rows: [], automaticOutlets: true })
+  assert.equal(coverage.find(outlet => outlet.id === 'o1')!.code, 'MY-020')
+})
+
+test('the sales rollup counts only sales sources, never GRN', () => {
+  // POS landed for Greenlane alone; nothing else did, and GRN has no importer.
+  const coverage = importedCoverage({
+    directory: directory(), rows: [row('o1', 'pos')], automaticOutlets: true, purchaseOutletIds: ['o1'],
+  })
+  const summary = salesCoverage(coverage)
+  // 2 outlets x 5 sales sources, with one imported cell — the GRN row that did
+  // land is excluded, so it cannot flatter the headline.
+  assert.equal(summary.salesCells, 10)
+  assert.equal(summary.importedSalesCells, 1)
+  assert.equal(summary.percentByOutlet.get('o1'), 20)
+  assert.equal(summary.percentByOutlet.get('o2'), 0)
+  assert.equal(summary.outletsWithGaps, 2)
+  assert.equal(summary.gapsBySource.pos, 1)
+  assert.equal(summary.gapsBySource.grab, 2)
+})
+
+test('an outlet with every sales source is not counted as a gap', () => {
+  const rows = ['pos', 'grab', 'foodpanda', 'shopee', 'apps'].map(source => row('o1', source))
+  const summary = salesCoverage(importedCoverage({ directory: directory(), rows, automaticOutlets: true }))
+  assert.equal(summary.percentByOutlet.get('o1'), 100)
+  assert.equal(summary.outletsWithGaps, 1) // o2 still has none
+  assert.equal(summary.gapsBySource.pos, 1)
+})
+
+test('a failed source is a gap even though its rows are present', () => {
+  const summary = salesCoverage(importedCoverage({
+    directory: directory(), rows: [row('o1', 'grab')], failedSources: ['grab'], automaticOutlets: true,
+  }))
+  assert.equal(summary.gapsBySource.grab, 2)
+  assert.equal(summary.importedSalesCells, 0)
 })
 
 test('coverage totals count outlets per state and never claim completeness', () => {

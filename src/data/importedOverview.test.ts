@@ -88,9 +88,9 @@ test('per-platform settlement derives from known payout only, and keptPct follow
   assert.equal(shopee.commissionAndFees, 12.8)
   // A platform with no rows has no settlement at all.
   assert.equal(grab.settlement, null)
-  // POS is all-channel, so it never carries a per-platform settlement.
-  assert.equal(posCol.grossMenu, null)
-  assert.equal(posCol.settlement, null)
+  // POS bases are visible, but remain all-channel (never added to platforms).
+  assert.equal(posCol.grossMenu, 100)
+  assert.equal(posCol.settlement, 0)
 })
 
 test('an unknown payout makes that platform settlement unavailable, not zero', () => {
@@ -100,6 +100,16 @@ test('an unknown payout makes that platform settlement unavailable, not zero', (
   assert.equal(shopee.grossMenu, 50)
   assert.equal(shopee.settlement, null)
   assert.equal(shopee.keptPct, null)
+})
+
+test('POS matrix shows sales bases without inventing a settlement or commission', () => {
+  const totals = importedOverview([{ ...pos, payout: null }], 'all').totals
+  const column = totals.byPlatform.find(p => p.platform === 'pos')!
+  assert.equal(column.grossMenu, 100)
+  assert.equal(column.netSCTax, 92.8)
+  assert.equal(column.settlement, null)
+  assert.equal(column.commissionAndFees, null)
+  assert.equal(totals.netAfterCommission, null)
 })
 
 test('platform differences use exact decimals and preserve credits', () => {
@@ -148,7 +158,8 @@ test('shared Overview renders the live month without May figures, NaN, or fictio
   assert.match(html, /August 2026/)
   assert.match(html, /Gross → Collected/)
   assert.match(html, /Net Settlement by Platform/)
-  assert.match(html, /Unavailable/)
+  assert.match(html, /—/)
+  assert.doesNotMatch(html, /Unavailable/)
   assert.doesNotMatch(html, /May 2026|3,503,594|NaN|Infinity/)
 })
 

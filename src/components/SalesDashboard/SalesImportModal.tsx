@@ -202,6 +202,7 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ reportingMon
         .eq('reporting_month', `${reportingMonth}-01`)
         .in('source', fileSources)
         .eq('status', 'imported')
+        .eq('created_by', auth.user.id)
         .limit(1)
       if (existingImportsError) throw new Error(existingImportsError.message)
       if (existingImports?.length) {

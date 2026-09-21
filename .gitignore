@@ -1,7 +1,8 @@
 node_modules/
 build/
 dist/
-coverage/
+# Anchored: an unanchored `coverage/` also swallowed src/pages/coverage/.
+/coverage/
 .DS_Store
 *.log
 .env*

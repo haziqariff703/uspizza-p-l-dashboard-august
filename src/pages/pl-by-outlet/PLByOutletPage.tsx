@@ -2,9 +2,10 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { PL_BY_OUTLET, PLATFORM_DETAIL_BY_OUTLET } from '../../data/outletData';
 import { PLATFORM_BRAND as PLATFORM_COLORS } from '../../platformColors';
 
-const money = (value: number) => `RM ${Math.abs(value).toLocaleString()}`;
+const money = (value: number | null) => value === null ? '—' : `RM ${value.toLocaleString()}`;
+const percent = (value: number | null) => value === null ? '—' : `${value.toFixed(1)}%`;
 
-const marginColor = (pct: number) => (pct < 0 ? '#dc2626' : pct >= 60 ? '#16a34a' : '#65a30d');
+const marginColor = (pct: number | null) => (pct === null ? '#64748B' : pct < 0 ? '#dc2626' : pct >= 60 ? '#16a34a' : '#65a30d');
 
 /** A month's P&L values. May uses the captured reference data; imported months
  * pass this same shape so the layout never changes when the month changes. */
@@ -12,10 +13,10 @@ export interface PLDisplayOutlet {
   name: string;
   code: string;
   entity: string;
-  netSales: number;
-  purchases: number;
-  grossProfit: number;
-  marginPct: number;
+  netSales: number | null;
+  purchases: number | null;
+  grossProfit: number | null;
+  marginPct: number | null;
   platforms?: Record<string, number>;
 }
 
@@ -38,14 +39,15 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
       ),
     [entityFilter, sourceOutlets]
   );
-  const sortedByProfit = useMemo(() => [...scopedOutlets].sort((a, b) => b.grossProfit - a.grossProfit), [scopedOutlets]);
+  const sortedByProfit = useMemo(() => [...scopedOutlets].sort((a, b) => (b.grossProfit ?? -Infinity) - (a.grossProfit ?? -Infinity)), [scopedOutlets]);
   const byCode = useMemo(() => new Map(scopedOutlets.map((o) => [o.code, o])), [scopedOutlets]);
   const byName = useMemo(() => [...scopedOutlets].sort((a, b) => a.name.localeCompare(b.name)), [scopedOutlets]);
   const scopeTotals = useMemo(() => {
-    const netSales = scopedOutlets.reduce((sum, outlet) => sum + outlet.netSales, 0);
-    const purchases = scopedOutlets.reduce((sum, outlet) => sum + outlet.purchases, 0);
-    const grossProfit = scopedOutlets.reduce((sum, outlet) => sum + outlet.grossProfit, 0);
-    return { netSales, purchases, grossProfit, grossMargin: netSales > 0 ? (grossProfit / netSales) * 100 : 0 };
+    const complete = scopedOutlets.filter(outlet => outlet.netSales !== null && outlet.purchases !== null);
+    const netSales = complete.length ? complete.reduce((sum, outlet) => sum + outlet.netSales!, 0) : null;
+    const purchases = complete.length ? complete.reduce((sum, outlet) => sum + outlet.purchases!, 0) : null;
+    const grossProfit = netSales !== null && purchases !== null ? netSales - purchases : null;
+    return { netSales, purchases, grossProfit, grossMargin: grossProfit !== null && netSales !== null && netSales !== 0 ? (grossProfit / netSales) * 100 : null, matchedCount: complete.length };
   }, [scopedOutlets]);
 
   const [localCode, setLocalCode] = useState<string>(selectedCode || 'MY-030');
@@ -93,7 +95,7 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
               <div className="text-right">
                 <div className="text-xs uppercase tracking-wide text-slate-400">Gross margin</div>
                 <div className="text-2xl font-bold tabular-nums" style={{ color: marginColor(outlet.marginPct) }}>
-                  {outlet.marginPct.toFixed(1)}%
+                  {percent(outlet.marginPct)}
                 </div>
               </div>
             </div>
@@ -130,7 +132,7 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
               </div>
               <div className="flex justify-between text-slate-500">
                 <span>Less: Purchases (GRN)</span>
-                <span className="tabular-nums">− {money(outlet.purchases)}</span>
+                <span className="tabular-nums">{outlet.purchases === null ? '—' : `− ${money(outlet.purchases)}`}</span>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-2 text-base">
                 <span className="font-bold text-slate-900">Gross Profit</span>
@@ -161,7 +163,7 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
           </select>
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Outlets · combined</div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Outlets · {scopeTotals.matchedCount} matched of {scopedOutlets.length}</div>
             <div className="flex justify-between py-1">
               <span className="text-slate-600">Net Sales</span>
               <span className="font-semibold tabular-nums text-slate-900">{money(scopeTotals.netSales)}</span>
@@ -173,7 +175,7 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
             <div className="flex justify-between border-t border-slate-200 pt-2">
               <span className="font-bold text-slate-900">Gross Profit</span>
               <span className="font-bold tabular-nums text-emerald-600">
-                {money(scopeTotals.grossProfit)} · {scopeTotals.grossMargin.toFixed(1)}%
+                {money(scopeTotals.grossProfit)} · {percent(scopeTotals.grossMargin)}
               </span>
             </div>
           </div>
@@ -208,7 +210,7 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
                 <td className="px-3 py-2 text-right tabular-nums text-slate-500">{money(o.purchases)}</td>
                 <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{money(o.grossProfit)}</td>
                 <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: marginColor(o.marginPct) }}>
-                  {o.marginPct.toFixed(1)}%
+                  {percent(o.marginPct)}
                 </td>
               </tr>
             ))}
@@ -216,11 +218,11 @@ export const PLByOutletPage: React.FC<PLByOutletPageProps> = ({ selectedCode, on
           <tfoot>
             <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
               <td className="px-3 py-2.5" />
-              <td className="px-3 py-2.5 text-slate-900">Total · {scopedOutlets.length} outlets</td>
+              <td className="px-3 py-2.5 text-slate-900">Matched total · {scopeTotals.matchedCount} / {scopedOutlets.length} outlets</td>
               <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{money(scopeTotals.netSales)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{money(scopeTotals.purchases)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{money(scopeTotals.grossProfit)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600">{scopeTotals.grossMargin.toFixed(1)}%</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600">{percent(scopeTotals.grossMargin)}</td>
             </tr>
           </tfoot>
         </table>

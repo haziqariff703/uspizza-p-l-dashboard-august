@@ -2,17 +2,19 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { CheckCircle, RefreshCircle, WarningTriangle } from 'iconoir-react'
 import { getSupabaseClient } from '../../lib/supabase'
 import { importedOverview, type ImportedRow } from '../../data/importedOverview'
-import { outletProfitability, type PurchaseRow } from '../../data/importedPurchases'
-import { coverageTotals, importedCoverage, COVERAGE_STATE_LABELS } from '../../data/importedCoverage'
+import { matchedProfitability, outletProfitability, purchaseRowFromGRN, type GRNPurchaseTotal, type PurchaseRow } from '../../data/importedPurchases'
+import { importedCoverage } from '../../data/importedCoverage'
 import { EMPTY_DIRECTORY, loadOutletDirectory, type OutletDirectory } from '../../lib/outletDirectory'
 import { OverviewPage } from '../../pages/overview/OverviewPage'
 import { SalesByOutletPage } from '../../pages/sales-by-outlet/SalesByOutletPage'
 import { PurchasesByOutletPage } from '../../pages/purchases-by-outlet/PurchasesByOutletPage'
 import { PurchasesToNetSalesPage } from '../../pages/purchases-to-net-sales/PurchasesToNetSalesPage'
 import { PLByOutletPage, type PLDisplayOutlet } from '../../pages/pl-by-outlet/PLByOutletPage'
+import { ImportedCoveragePage } from '../../pages/coverage/ImportedCoveragePage'
 import { importedFeesViewModel } from '../../data/importedFees'
 import { FeesSection } from '../../pages/fees/FeesSection'
 import { ENTITY_NAMES, type EntityScope } from '../../data/aggregate'
+import { liveOutletRoster } from '../../data/liveOutletRoster'
 import { type ChannelFilter, type DashboardSection } from '../../types'
 
 interface ImportedSalesSectionProps {
@@ -53,7 +55,6 @@ interface JoinedPurchaseRow {
   outlets: JoinedOutlet | null
 }
 interface ImportStatusRow { source: string; file_name: string; status: string; created_at: string }
-interface GRNOutletTotal { branch_code: string; branch_name: string; total_purchase: number | string }
 
 /** Reads one table a page at a time, so a full month is never silently truncated. */
 async function readAll<T>(page: (from: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
@@ -70,6 +71,7 @@ async function readAll<T>(page: (from: number) => PromiseLike<{ data: unknown; e
 export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ reportingMonth, refreshToken, entityFilter, channelFilter, section, onEntityFilterChange }) => {
   const [rows, setRows] = useState<ImportedRow[]>([])
   const [purchases, setPurchases] = useState<PurchaseRow[]>([])
+  const [unmatchedGRN, setUnmatchedGRN] = useState<Array<{ line_count: number | string }>>([])
   const [imports, setImports] = useState<ImportStatusRow[]>([])
   const [directory, setDirectory] = useState<OutletDirectory>(EMPTY_DIRECTORY)
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'needs-auth' | 'error'>('loading')
@@ -84,7 +86,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
 
   useEffect(() => {
     let active = true
-    const clear = () => { setRows([]); setPurchases([]); setImports([]); setDirectory(EMPTY_DIRECTORY); setRefreshError('') }
+    const clear = () => { setRows([]); setPurchases([]); setUnmatchedGRN([]); setImports([]); setDirectory(EMPTY_DIRECTORY); setRefreshError('') }
 
     const load = async () => {
       // A month change is known before any network call, so the previous
@@ -118,8 +120,8 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
 
       try {
         const month = `${reportingMonth}-01`
-        const monthEnd = new Date(Number(reportingMonth.slice(0, 4)), Number(reportingMonth.slice(5, 7)), 0).toISOString().slice(0, 10)
-        const [sales, bought, imported] = await Promise.all([
+        const monthEnd = `${reportingMonth}-${new Date(Date.UTC(Number(reportingMonth.slice(0, 4)), Number(reportingMonth.slice(5, 7)), 0)).getUTCDate()}`
+        const [sales, bought, imported, unmatched] = await Promise.all([
           readAll<JoinedSalesRow>(from => supabase
             .from('sales_daily')
             .select(`
@@ -134,8 +136,8 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
             .order('outlet_id', { ascending: true })
             .range(from, from + PAGE_SIZE - 1)),
           supabase.rpc('get_purchases_by_outlet', { p_start_date: month, p_end_date: monthEnd }).then(({ data, error }) => {
-            if (error) throw new Error(error.message)
-            return (data ?? []) as GRNOutletTotal[]
+            if (error) throw new Error(`Could not load GRN purchases: ${error.message}`)
+            return (data ?? []) as GRNPurchaseTotal[]
           }),
           // Failed and draft imports leave no sales_daily rows at all, so they
           // would otherwise vanish instead of showing as an actionable gap.
@@ -147,6 +149,10 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
             if (error) throw new Error(error.message)
             return (data ?? []) as ImportStatusRow[]
           })(),
+          supabase.rpc('get_unmatched_grn_branches', { p_start_date: month, p_end_date: monthEnd }).then(({ data, error }) => {
+            if (error) throw new Error(`Could not check GRN mapping coverage: ${error.message}`)
+            return (data ?? []) as Array<{ line_count: number | string }>
+          }),
         ])
         if (!active) return
 
@@ -167,19 +173,19 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           payout: row.payout,
           record_count: row.record_count,
         })))
-        setPurchases(bought.map(row => ({
-          purchase_date: month,
-          outlet_id: row.branch_code,
-          outlet_name: row.branch_name,
-          entity: row.branch_code.startsWith('SB-') ? 'Sabah' : 'MY US PIZZA',
-          purchase_amount: row.total_purchase,
-        })))
+        setPurchases(bought.map(row => purchaseRowFromGRN(row, month)))
+        setUnmatchedGRN(unmatched)
         setImports(imported)
         setStatus(sales.length || bought.length || imported.length ? 'ready' : 'empty')
         loadedScopeRef.current = scope
         reloadDirectory()
       } catch (caught) {
         if (!active) return
+        // The UI only ever shows caught.message; log the full error here so a
+        // real stack trace (file:line) is still visible in the console when
+        // something throws with an unhelpful message, e.g. a TypeError from
+        // deep inside a Supabase call.
+        console.error('[ImportedSalesSection] load failed:', caught)
         const errorMessage = caught instanceof Error ? caught.message : 'Unable to load imported sales.'
         // Stale figures survive only a refresh failure inside the same scope.
         if (loadedScopeRef.current === scope) setRefreshError(errorMessage)
@@ -193,20 +199,29 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
   }, [reportingMonth, refreshToken])
 
   const overview = useMemo(() => importedOverview(rows, entityFilter), [rows, entityFilter])
+  const roster = useMemo(() => liveOutletRoster(directory.outlets), [directory.outlets])
+  const scopedRoster = useMemo(() => roster.filter(outlet => entityFilter === 'all' || outlet.entity === ENTITY_NAMES[entityFilter]), [roster, entityFilter])
   const profitability = useMemo(() => {
-    const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const salesIdByName = new Map(overview.outlets.map(outlet => [key(outlet.name), outlet.id]))
-    const normalizedPurchases = purchases
+    const scopedPurchases = purchases
       .filter(row => entityFilter === 'all' || row.entity === ENTITY_NAMES[entityFilter])
-      .map(row => ({ ...row, outlet_id: salesIdByName.get(key(row.outlet_name)) ?? row.outlet_id }))
-    return outletProfitability(overview.outlets, normalizedPurchases)
-  }, [overview.outlets, purchases, entityFilter])
+    return outletProfitability(scopedRoster.map(outlet => ({ ...outlet, net: overview.outlets.find(row => row.id === outlet.id)?.net ?? null })), scopedPurchases)
+  }, [overview.outlets, scopedRoster, purchases, entityFilter])
+  const overviewWithPurchases = useMemo(() => {
+    const scoped = purchases.filter(row => entityFilter === 'all' || row.entity === ENTITY_NAMES[entityFilter])
+    const total = scoped.length && scoped.every(row => row.purchase_amount !== null)
+      ? Math.round(scoped.reduce((sum, row) => sum + Number(row.purchase_amount), 0) * 100) / 100 : null
+    const { grossProfit, margin, matchedCount, excludedCount } = matchedProfitability(profitability)
+    const profitabilityNote = `${matchedCount} matched POS/GRN outlets · imported sales coverage, not full-month profit. ${excludedCount} outlets excluded for missing sales or purchases.`
+    const counts = { all: roster.length, myUsPizza: roster.filter(row => row.entity === ENTITY_NAMES.myUsPizza).length, sabah: roster.filter(row => row.entity === ENTITY_NAMES.sabah).length }
+    return { ...overview, counts, profitabilityNote, totals: { ...overview.totals, outletCount: scopedRoster.length, purchases: total, grossProfit, margin } }
+  }, [overview, profitability, purchases, entityFilter, roster, scopedRoster])
   // Keep section 7 on the same detailed P&L screen for every month. The
   // selected reporting month only changes these inputs, never the layout.
   const importedPLOutlets = useMemo<PLDisplayOutlet[]>(() => {
     const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '')
     const salesIdByName = new Map(overview.outlets.map(outlet => [key(outlet.name), outlet.id]))
     const directoryById = new Map<string, OutletDirectory['outlets'][number]>(directory.outlets.map(outlet => [outlet.id, outlet]))
+    const entityById = new Map([...rows, ...purchases].map(row => [row.outlet_id, row.entity]))
     const platformTotals = new Map<string, Record<string, number>>()
 
     for (const row of rows) {
@@ -221,33 +236,32 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
     return profitability
       // Section 7 requires each P&L input. Omit incomplete outlets rather than
       // converting unavailable purchases or margin into a fictional zero.
-      .filter((outlet) => outlet.net !== null && outlet.purchases !== null && outlet.grossProfit !== null && outlet.margin !== null)
       .map(outlet => {
       const directoryOutlet = directoryById.get(outlet.id)
-      const netSales = Number(outlet.net ?? 0)
-      const totalPurchases = Number(outlet.purchases ?? 0)
-      const grossProfit = netSales - totalPurchases
+      const netSales = outlet.net
+      const totalPurchases = outlet.purchases
+      const grossProfit = outlet.grossProfit
       return {
         name: outlet.name,
         code: directoryOutlet?.code ?? outlet.id,
-        entity: directoryOutlet?.entity ?? (outlet.id.startsWith('SB-') ? 'Sabah' : 'MY US PIZZA'),
+        entity: directoryOutlet?.entity ?? entityById.get(outlet.id) ?? 'Unresolved entity',
         netSales,
         purchases: totalPurchases,
         grossProfit,
-        marginPct: netSales > 0 ? (grossProfit / netSales) * 100 : 0,
+        marginPct: outlet.margin,
         platforms: platformTotals.get(outlet.id) ?? {},
       }
       })
-  }, [directory.outlets, overview.outlets, profitability, rows])
+  }, [directory.outlets, overview.outlets, profitability, rows, purchases])
   // Section 3 reads what actually landed: rows per outlet and source, plus the
   // import statuses, so a failed file is a state rather than an absence.
   const coverage = useMemo(() => importedCoverage({
-    directory,
+    directory: { ...directory, outlets: scopedRoster },
     rows: rows.filter(row => entityFilter === 'all' || row.entity === ENTITY_NAMES[entityFilter]),
     automaticOutlets: true,
     failedSources: imports.filter(item => item.status === 'failed').map(item => item.source),
     purchaseOutletIds: purchases.map(row => row.outlet_id),
-  }), [directory, rows, imports, purchases, entityFilter])
+  }), [directory, scopedRoster, rows, imports, purchases, entityFilter])
   const period = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(`${reportingMonth}-01T00:00:00`))
   // Section 2 reads the same loaded rows as every other section. The live
   // adapter turns them into the shared fee view-model; a failed/draft file is
@@ -270,23 +284,30 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
   </section>
 
   return <section className="space-y-4">
+    {unmatchedGRN.length > 0 && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">GRN mapping gap: {unmatchedGRN.reduce((sum, row) => sum + Number(row.line_count), 0)} rows across {unmatchedGRN.length} branches are excluded from mapped purchase figures. Coverage is for all entities.</p>}
     {isRefreshing && <p role="status" className="flex items-center gap-2 text-xs font-medium text-slate-500"><RefreshCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />Refreshing imported sales…</p>}
     {refreshError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">Could not refresh imported sales. Showing the last loaded figures. {refreshError}</p>}
     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
       Imported coverage only; not a reconciled full-month corporate total. POS includes all channels, so platform reports are not added to it. Data imported by any signed-in user is shown here.
-      <p className="mt-2">POS coverage: {overview.counts.myUsPizza} MY US Pizza + {overview.counts.sabah} Sabah = {overview.counts.all} outlets.</p>
+      <p className="mt-2">Operating outlets: {roster.length}. POS coverage: {overview.counts.myUsPizza} MY US Pizza + {overview.counts.sabah} Sabah = {overview.counts.all} outlets with POS data. Platform-only outlets remain visible; missing data is —.</p>
     </div>
-    {section === 'overview' ? <OverviewPage entityFilter={entityFilter} channelFilter={channelFilter} onEntityFilterChange={onEntityFilterChange} imported={overview} period={period} />
+    {section === 'overview' ? <OverviewPage entityFilter={entityFilter} channelFilter={channelFilter} onEntityFilterChange={onEntityFilterChange} imported={overviewWithPurchases} period={period} />
       : section === 'salesByOutlet' ? <SalesByOutletPage entityFilter={entityFilter} importedRows={rows} period={period} />
-      : section === 'coverage' ? <div className="space-y-4">
-          <TableCard title={`Channel coverage · ${period}`} subtitle="Outlets per state, by source. Imported means rows landed; Unavailable means no rows were imported for the outlet/source; Failed means this month's import did not finish. Nothing here claims a reconciled month." headers={['Source', 'Imported', 'Failed', 'Unavailable']} rows={coverageTotals(coverage).map(entry => [entry.source === 'grn' ? 'GRN / purchases' : sourceName(entry.source), String(entry.counts.imported), String(entry.counts.failed), String(entry.counts.unavailable)])} />
-          <TableCard title={`Outlet coverage · ${period}`} subtitle="Every outlet this account owns, and what each source delivered for it. Record counts are source rows, not necessarily orders." headers={['Outlet', 'POS', 'Grab', 'FoodPanda', 'Shopee', 'Apps', 'GRN']} rows={coverage.map(outlet => [outlet.name, ...outlet.cells.map(cell => cell.state === 'imported' && cell.records ? `${COVERAGE_STATE_LABELS[cell.state]} · ${cell.records.toLocaleString()} / ${cell.days}d` : COVERAGE_STATE_LABELS[cell.state])])} />
-          <TableCard title="Import status" subtitle="Every sales file uploaded for this month, most recent first. A draft or failed import contributed no figures above." headers={['File', 'Source', 'Status']} rows={imports.length ? imports.map(i => [i.file_name, sourceName(i.source), i.status]) : [['No imports yet', '—', '—']]} />
-        </div>
+      : section === 'coverage' ? <ImportedCoveragePage coverage={coverage} imports={imports} period={period} />
       : section === 'purchasesByOutlet' ? <PurchasesByOutletPage entityFilter={entityFilter} importedPurchases={purchases} period={period} />
       : section === 'purchasesToNetSales' ? <PurchasesToNetSalesPage entityFilter={entityFilter} importedRows={profitability} period={period} />
       : section === 'plByOutlet' ? <PLByOutletPage entityFilter={entityFilter} outletsOverride={importedPLOutlets} period={period} />
       : <FeesSection model={fees} channelFilter={channelFilter} />}
+    {section === 'salesByOutlet' && <TableCard
+      title={`Operating outlets · ${scopedRoster.length} · ${period}`}
+      subtitle="Each source is shown separately. Platform amounts overlap POS and are not added together. — means no known value; not zero."
+      headers={['Outlet', 'POS net', 'Grab net', 'FoodPanda net', 'Shopee net', 'Apps net', 'GRN']}
+      rows={scopedRoster.map(outlet => {
+        const values = importedOverview(rows.filter(row => row.outlet_id === outlet.id), 'all').totals
+        const money = (value: number | null) => value === null ? '—' : `RM ${value.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        return [outlet.name, ...['pos', 'grab', 'foodpanda', 'shopee', 'apps'].map(source => money(values.byPlatform.find(platform => platform.platform === source)?.net ?? null)), money(profitability.find(row => row.id === outlet.id)?.purchases ?? null)]
+      })}
+    />}
   </section>
 }
 

@@ -87,7 +87,7 @@ export function importedOverview(rows: ImportedRow[], scope: EntityScope) {
     ))
     // POS is all-channel, not a POS-only platform split. Derive the other
     // columns using the original's basis differences and source-backed payout.
-    const basisRows = platform === 'pos' ? [] : platformRows
+    const basisRows = platformRows
     // Older Grab imports copied tax-inclusive Net Sales into both sales bases
     // and retained negative promotion deductions. Do not present that copied
     // number as original menu price or pre-tax net until source reconciliation.

@@ -32,6 +32,7 @@ export interface CoverageCell {
 export interface OutletCoverage {
   id: string
   name: string
+  code: string | null
   entity: string | null
   cells: CoverageCell[]
 }
@@ -70,7 +71,7 @@ export function importedCoverage({
   const known = new Map<string, DirectoryOutlet>(directory.outlets.map(outlet => [outlet.id, outlet]))
   for (const row of rows) {
     if (row.outlet_id && !known.has(row.outlet_id)) {
-      known.set(row.outlet_id, { id: row.outlet_id, name: row.outlet_name, code: null, entity: row.entity ?? null })
+      known.set(row.outlet_id, { id: row.outlet_id, name: row.outlet_name, code: row.outlet_code, entity: row.entity ?? null })
     }
   }
 
@@ -96,8 +97,33 @@ export function importedCoverage({
       state: purchased.has(outlet.id) ? 'imported' : 'unavailable',
       records: 0, days: 0,
     })
-    return { id: outlet.id, name: outlet.name, entity: outlet.entity, cells }
+    return { id: outlet.id, name: outlet.name, code: outlet.code, entity: outlet.entity, cells }
   }).sort((left, right) => left.name.localeCompare(right.name))
+}
+
+/**
+ * Sales-source rollups for Section 3's strip, headline rate and per-outlet
+ * percentage. GRN is excluded from all of them: it has no importer yet, so
+ * counting it would hold every outlet permanently short of complete for a
+ * reason that has nothing to do with sales coverage.
+ */
+export function salesCoverage(coverage: OutletCoverage[]) {
+  const importedPerOutlet = coverage.map(outlet => ({
+    id: outlet.id,
+    imported: outlet.cells.filter(cell => cell.source !== 'grn' && cell.state === 'imported').length,
+  }))
+  return {
+    salesCells: coverage.length * ALIAS_SOURCES.length,
+    importedSalesCells: importedPerOutlet.reduce((total, outlet) => total + outlet.imported, 0),
+    outletsWithGaps: importedPerOutlet.filter(outlet => outlet.imported < ALIAS_SOURCES.length).length,
+    /** Outlets whose cell for that source did not land rows. */
+    gapsBySource: Object.fromEntries(ALIAS_SOURCES.map(source => [
+      source,
+      coverage.filter(outlet => outlet.cells.find(cell => cell.source === source)?.state !== 'imported').length,
+    ])) as Record<AliasSource, number>,
+    percentByOutlet: new Map(importedPerOutlet.map(outlet =>
+      [outlet.id, Math.round((outlet.imported / ALIAS_SOURCES.length) * 100)])),
+  }
 }
 
 /** Per-state outlet counts for one source, for the coverage strip. */
