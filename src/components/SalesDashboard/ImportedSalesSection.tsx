@@ -51,7 +51,8 @@ interface JoinedPurchaseRow {
   outlets: JoinedOutlet | null
 }
 interface ImportStatusRow { source: string; file_name: string; status: string; created_at: string }
-interface GRNOutletTotal { branch_code: string; branch_name: string; total_purchase: number | string }
+/** RPC rows can contain legacy imports with a missing branch code or name. */
+interface GRNOutletTotal { branch_code: string | null; branch_name: string | null; total_purchase: number | string | null }
 
 /** Reads one table a page at a time, so a full month is never silently truncated. */
 async function readAll<T>(page: (from: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
@@ -161,13 +162,18 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           payout: row.payout,
           record_count: row.record_count,
         })))
-        setPurchases(bought.map(row => ({
-          purchase_date: month,
-          outlet_id: row.branch_code,
-          outlet_name: row.branch_name,
-          entity: row.branch_code.startsWith('SB-') ? 'Sabah' : 'MY US PIZZA',
-          purchase_amount: row.total_purchase,
-        })))
+        setPurchases(bought
+          // A missing code cannot be matched to a sales outlet. Do not let a
+          // malformed legacy GRN row prevent the whole imported-sales view
+          // from loading.
+          .filter((row): row is GRNOutletTotal & { branch_code: string } => typeof row.branch_code === 'string' && row.branch_code.length > 0)
+          .map(row => ({
+            purchase_date: month,
+            outlet_id: row.branch_code,
+            outlet_name: row.branch_name?.trim() || 'Unnamed outlet',
+            entity: row.branch_code.startsWith('SB-') ? 'Sabah' : 'MY US PIZZA',
+            purchase_amount: row.total_purchase,
+          })))
         setImports(imported)
         setStatus(sales.length || bought.length || imported.length ? 'ready' : 'empty')
         loadedScopeRef.current = scope
