@@ -161,19 +161,33 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           payout: row.payout,
           record_count: row.record_count,
         })))
-        setPurchases(bought.map(row => ({
-          purchase_date: month,
-          outlet_id: row.branch_code,
-          outlet_name: row.branch_name,
-          entity: row.branch_code.startsWith('SB-') ? 'Sabah' : 'MY US PIZZA',
-          purchase_amount: row.total_purchase,
-        })))
+        setPurchases(bought
+          // A GRN total with no resolvable branch_code can't be attributed to
+          // any outlet; skip it rather than crash on it (it previously threw
+          // reading .startsWith off that undefined value).
+          .filter(row => {
+            if (row.branch_code) return true
+            console.warn('[ImportedSalesSection] Skipping GRN purchase row with no branch_code:', row)
+            return false
+          })
+          .map(row => ({
+            purchase_date: month,
+            outlet_id: row.branch_code,
+            outlet_name: row.branch_name,
+            entity: row.branch_code.startsWith('SB-') ? 'Sabah' : 'MY US PIZZA',
+            purchase_amount: row.total_purchase,
+          })))
         setImports(imported)
         setStatus(sales.length || bought.length || imported.length ? 'ready' : 'empty')
         loadedScopeRef.current = scope
         reloadDirectory()
       } catch (caught) {
         if (!active) return
+        // The UI only ever shows caught.message; log the full error here so a
+        // real stack trace (file:line) is still visible in the console when
+        // something throws with an unhelpful message, e.g. a TypeError from
+        // deep inside a Supabase call.
+        console.error('[ImportedSalesSection] load failed:', caught)
         const errorMessage = caught instanceof Error ? caught.message : 'Unable to load imported sales.'
         // Stale figures survive only a refresh failure inside the same scope.
         if (loadedScopeRef.current === scope) setRefreshError(errorMessage)
