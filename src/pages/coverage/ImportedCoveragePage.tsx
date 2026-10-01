@@ -1,16 +1,20 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   WarningCircle as AlertCircle,
   Check,
   Database,
   MailIn as Inbox,
   MinusCircle,
+  Trash as Trash2,
   WarningTriangle,
   Xmark,
 } from 'iconoir-react';
 import { ALIAS_SOURCES } from '../../lib/outletDirectory';
 import { ENTITY_NAMES } from '../../data/aggregate';
 import { coverageTotals, salesCoverage, type ImportedCoverageState, type OutletCoverage } from '../../data/importedCoverage';
+import { Card, CardContent } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
 import {
   COVERAGE_TONES,
   CoverageMatrixLayout,
@@ -24,6 +28,8 @@ interface ImportedCoveragePageProps {
   /** Every sales file recorded for this month, most recent first. */
   imports: Array<{ source: string; file_name: string; status: string; created_at: string }>;
   period: string;
+  /** Deletes every imported sheet for the current month; resolves with a summary. */
+  onDeleteMonthSheets: () => Promise<string>;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -86,7 +92,30 @@ function filesBySource(imports: ImportRecord[]) {
  * `sales_daily` onto the same coverage view-model the May demo uses, so both
  * months render through `CoverageMatrixLayout`.
  */
-export const ImportedCoveragePage: React.FC<ImportedCoveragePageProps> = ({ coverage, imports, period }) => {
+export const ImportedCoveragePage: React.FC<ImportedCoveragePageProps> = ({ coverage, imports, period, onDeleteMonthSheets }) => {
+  const [confirmText, setConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteResult, setDeleteResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // The phrase a preparer must type to arm the destructive button. Keyed to the
+  // reporting month so the confirmation is never a rote word.
+  const confirmPhrase = `delete ${period.toLowerCase()}`;
+
+  const handleDelete = async () => {
+    if (confirmText !== confirmPhrase) return;
+    setIsDeleting(true);
+    setDeleteResult(null);
+    try {
+      const summary = await onDeleteMonthSheets();
+      setConfirmText('');
+      setDeleteResult({ ok: true, message: summary });
+    } catch (caught) {
+      setDeleteResult({ ok: false, message: caught instanceof Error ? caught.message : 'Could not delete the sheets.' });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const model = useMemo<CoverageViewModel>(() => {
     const totals = coverageTotals(coverage);
     const countsFor = (source: string): Record<ImportedCoverageState, number> =>
@@ -206,5 +235,59 @@ export const ImportedCoveragePage: React.FC<ImportedCoveragePageProps> = ({ cove
     };
   }, [coverage, imports, period]);
 
-  return <CoverageMatrixLayout model={model} />;
+  return (
+    <>
+      <CoverageMatrixLayout model={model} />
+
+      {/* Danger zone — destructive, owner-scoped, type-to-confirm. */}
+      <Card className="border-rose-200">
+        <CardContent className="py-5">
+          <div className="flex items-center gap-2.5">
+            <Trash2 className="h-5 w-5 text-rose-600" />
+            <div>
+              <p className="text-sm font-bold text-rose-900">Danger zone</p>
+              <p className="text-xs text-rose-700/80">
+                Delete every imported sheet for {period}. This removes the sales import records and
+                their daily totals. It cannot be undone.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <label className="block text-xs font-bold text-slate-700">
+              Type <span className="rounded bg-rose-50 px-1.5 py-0.5 font-mono text-rose-700">{confirmPhrase}</span> to confirm
+              <Input
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder={confirmPhrase}
+                className="mt-1.5"
+                aria-label={`Type ${confirmPhrase} to confirm deletion`}
+              />
+            </label>
+
+            {deleteResult && (
+              <p
+                role={deleteResult.ok ? 'status' : 'alert'}
+                className={`rounded-lg px-3 py-2 text-xs font-medium ${
+                  deleteResult.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+                }`}
+              >
+                {deleteResult.message}
+              </p>
+            )}
+
+            <Button
+              variant="destructive"
+              disabled={confirmText !== confirmPhrase || isDeleting}
+              onClick={() => void handleDelete()}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>{isDeleting ? 'Deleting…' : `Delete ${period} sheets`}</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
 };

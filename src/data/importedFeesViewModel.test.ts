@@ -23,6 +23,10 @@ const row = (
   platform_fees,
   advertising_spend,
   payout: '10',
+  commission: null,
+  payment_gateway_fee: null,
+  adjustments: null,
+  total_deductions: null,
   record_count: 1,
   ...overrides,
 })
@@ -39,6 +43,18 @@ test('section 2: exact decimal sums survive the view-model', () => {
   const grab = platform([row('grab', '0.10', '0.20'), row('grab', '0.20', '0.10')], 'Grab')
   assert.equal(grab.cells.platformFees.value, '0.30')
   assert.equal(grab.cells.advertising.value, '0.30')
+})
+
+test('section 2: payout is surfaced per platform, separate from the fee total', () => {
+  const grab = platform([row('grab', '0.10', '0.20', { payout: '900.50' }), row('grab', '0.20', '0.10', { payout: '450.25' })], 'Grab')
+  assert.equal(grab.payout.state, 'known')
+  assert.equal(grab.payout.value, '1350.75')
+
+  const unknown = platform([row('grab', '0.10', '0.20', { payout: null })], 'Grab')
+  assert.equal(unknown.payout.state, 'unknown', 'a row exists but did not supply a payout')
+
+  const shopee = platform([], 'Shopee')
+  assert.equal(shopee.payout.state, 'none', 'no rows at all for this platform')
 })
 
 test('section 2: explicit zero is known, distinct from null unknown and no rows', () => {
@@ -68,7 +84,7 @@ test('section 2: no rows differs from unknown fields', () => {
 
 test('section 2: partial coverage cannot produce a completed platform total', () => {
   const grab = platform([row('grab', '2.50', '1.25')], 'Grab')
-  // Commission/gateway/adjustments are not persisted -> unknown -> total cannot complete.
+  // Commission/gateway/adjustments are null (not supplied) -> unknown -> total cannot complete.
   assert.equal(grab.cells.commission.state, 'unknown')
   assert.equal(grab.total.state, 'unknown')
   assert.equal(grab.total.value, null)
@@ -131,10 +147,26 @@ test('section 2: Apps and POS cannot render an invented fee', () => {
   assert.equal(model.empty, true, 'a POS-only month has no fee-bearing source')
 })
 
-test('section 2: live commission rate is unavailable without a persisted denominator', () => {
-  const grab = platform([row('grab', '2.50', '1.25')], 'Grab')
-  assert.equal(grab.commissionRate.state, 'none')
-  assert.equal(grab.commissionRate.value, null)
+test('section 2: live commission rate is known only when both commission and net sales are known', () => {
+  // Commission null + net sales null -> unknown (not none: rows exist).
+  const unknown = platform([row('grab', '2.50', '1.25')], 'Grab')
+  assert.equal(unknown.commissionRate.state, 'unknown')
+  assert.equal(unknown.commissionRate.value, null)
+
+  // Both known -> a real percentage.
+  const known = platform([row('grab', '2.50', '1.25', { commission: '27.23', net_sales: '100' })], 'Grab')
+  assert.equal(known.commissionRate.state, 'known')
+  assert.equal(known.commissionRate.value, '27.23')
+
+  // Commission known over a zero net sales -> unknown, never a divide-by-zero.
+  const zero = platform([row('grab', '2.50', '1.25', { commission: '10', net_sales: '0' })], 'Grab')
+  assert.equal(zero.commissionRate.state, 'unknown')
+  assert.equal(zero.commissionRate.value, null)
+
+  // No rows at all -> none.
+  const none = platform([row('foodpanda', '1', '1')], 'Grab')
+  assert.equal(none.commissionRate.state, 'none')
+  assert.equal(none.commissionRate.value, null)
 })
 
 test('section 2: coverage reports range, outlets, unknown fields and exclusions', () => {

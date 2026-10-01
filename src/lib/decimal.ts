@@ -127,6 +127,28 @@ export function scaleAmount(value: Amount, numerator: bigint, denominator: bigin
  */
 export const taxFromInclusive = (value: Amount): Amount => scaleAmount(value, 6n, 106n)
 
+/**
+ * numerator ÷ denominator × 100, half-up to 2 decimal places, keeping the sign.
+ * Returns AMOUNT_UNKNOWN when either side is not a value or the denominator is
+ * zero — a rate derived from something the source never stated is not a figure,
+ * and division by zero is never an Infinity. This is the only arithmetic that
+ * divides one Amount by another; `scaleAmount` divides by a `bigint` constant.
+ */
+export function rateOf(numerator: Amount, denominator: Amount): Amount {
+  if (numerator.kind !== 'value' || denominator.kind !== 'value') return AMOUNT_UNKNOWN
+  const { units: nUnits, scale: nScale } = toScaled(numerator.value)
+  const { units: dUnits, scale: dScale } = toScaled(denominator.value)
+  if (dUnits === 0n) return AMOUNT_UNKNOWN
+  // Align both to the larger scale, then compute (n/d) × 100 with two extra
+  // decimal places: numerator scaled by 10^2 (percent) and 10^2 (2 dp), so the
+  // divideHalfUp result is an integer count of hundredths-of-a-percent.
+  const scale = Math.max(nScale, dScale)
+  const n = nUnits * 10n ** BigInt(scale - nScale)
+  const d = dUnits * 10n ** BigInt(scale - dScale)
+  const hundredths = divideHalfUp(n * 10000n, d)
+  return amount(format({ units: hundredths, scale: 2 }))
+}
+
 /** Builds the `normalized_row_json` money keys: value → string, unknown → null,
  *  absent → key omitted. */
 export function amountsToJson(fields: Record<string, Amount>): Record<string, Decimal | null> {

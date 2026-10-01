@@ -11,7 +11,7 @@ export const copy = {
   navDescPurchasesByOutlet: 'GRN received, all 44 outlets',
   // Unused: the grossSalesByOutlet page was removed; section 6 is now purchasesToNetSales.
   navDescGrossSalesByOutlet: 'Menu price before discount, per outlet',
-  navDescPLByOutlet: 'Net sales − purchases, per outlet',
+  navDescPLByOutlet: 'Gross profit ranked, with loss-making outlets flagged',
   navReconciled: 'Reconciled',
   navOutletScope: '44 outlets · 2 pre-opening',
   navDashboardTab: 'Dashboard',

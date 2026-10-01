@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { WarningTriangle } from 'iconoir-react'
+import type { EntityScope } from '../../data/aggregate'
+import { GRAB_AUGUST_SHEET_PREVIEW } from '../../data/grabAugustSheetPreview'
 import {
   FEE_CATEGORIES,
   FEE_PLATFORMS,
@@ -19,6 +21,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 interface FeesSectionProps {
   model: FeesViewModel
   channelFilter: ChannelFilter
+  grabAugustSheetScope?: EntityScope
 }
 
 type PlatformSelection = 'all' | FeePlatformId
@@ -56,7 +59,7 @@ function Cell({ cell, credit = true }: { cell: FeeCell; credit?: boolean }) {
 
 /* ---------------------------------- Page --------------------------------- */
 
-export const FeesSection: React.FC<FeesSectionProps> = ({ model, channelFilter }) => {
+export const FeesSection: React.FC<FeesSectionProps> = ({ model, channelFilter, grabAugustSheetScope }) => {
   const [active, setActive] = useState<PlatformSelection>('all')
 
   const filterIsPlatform = channelFilter !== 'All' && (FEE_PLATFORMS as readonly string[]).includes(channelFilter)
@@ -86,6 +89,7 @@ export const FeesSection: React.FC<FeesSectionProps> = ({ model, channelFilter }
             figure is shown, because a month with no source is not a month of zeros.
           </p>
         </div>
+        {grabAugustSheetScope && (channelFilter === 'All' || channelFilter === 'Grab') && <GrabSheetPreview scope={grabAugustSheetScope} />}
       </section>
     )
   }
@@ -102,7 +106,7 @@ export const FeesSection: React.FC<FeesSectionProps> = ({ model, channelFilter }
       {/* 2 — KPI cards */}
       <div className="grid gap-3 sm:grid-cols-3">
         <KpiCard label="Advertising spend / month" cell={model.totals.advertisingSpend} detail="Explicit advertising values only." />
-        <KpiCard label="Commission / month" cell={model.totals.commission} detail="Commission is not persisted separately in the current imports." />
+        <KpiCard label="Commission / month" cell={model.totals.commission} detail="Itemized commission columns, summed over known platforms only." />
         <KpiCard
           label="Total fees / month"
           cell={model.totals.totalFees}
@@ -110,6 +114,10 @@ export const FeesSection: React.FC<FeesSectionProps> = ({ model, channelFilter }
           valueClassName={model.totals.totalFees.state === 'known' ? 'text-[#C8102E]' : undefined}
         />
       </div>
+
+      {grabAugustSheetScope && (channelFilter === 'All' || channelFilter === 'Grab') && (
+        <GrabSheetPreview scope={grabAugustSheetScope} />
+      )}
 
       {/* 3 + 4 — Tabs directly above the matrix they filter */}
       <div>
@@ -134,6 +142,34 @@ export const FeesSection: React.FC<FeesSectionProps> = ({ model, channelFilter }
       <ReconciliationPanel model={model} />
     </section>
   )
+}
+
+function GrabSheetPreview({ scope }: { scope: EntityScope }) {
+  const source = GRAB_AUGUST_SHEET_PREVIEW[scope]
+  const items = [
+    ['Commission including its fee tax', source.commission],
+    ['Advertising including ad tax', source.advertising],
+    ['Platform / service fees', source.platformFees],
+  ] as const
+  return <aside aria-label="Grab August source sheet preview" className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h3 className="text-sm font-bold text-slate-900">Grab · August source sheet</h3>
+        <p className="mt-1 text-xs text-slate-600">{source.outletCount} mapped outlets in this entity scope · source extract, separate from imported totals</p>
+      </div>
+      <div className="text-right">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-600">Known-only subtotal</p>
+        <p className="text-xl font-black tabular-nums text-slate-900">{formatDecimal(source.knownSubtotal)}</p>
+      </div>
+    </div>
+    <dl className="mt-3 grid gap-2 sm:grid-cols-3">
+      {items.map(([label, value]) => <div key={label} className="rounded-lg bg-white px-3 py-2">
+        <dt className="text-xs text-slate-600">{label}</dt>
+        <dd className="mt-0.5 font-bold tabular-nums text-slate-900">{formatDecimal(value)}</dd>
+      </div>)}
+    </dl>
+    <p className="mt-3 text-xs leading-5 text-amber-900">Payment gateway and signed adjustments remain unknown. The source has incomplete outlet coverage; this subtotal is not a complete Grab fee total or a corporate total. The matrix and KPIs above use imported rows only.</p>
+  </aside>
 }
 
 const totalDetail = (model: FeesViewModel): string => {
@@ -401,6 +437,10 @@ function CoverageNote({ model, visible }: { model: FeesViewModel; visible: FeePl
                 {entry.coverage.unknownFieldCount > 0 ? ` · ${entry.coverage.unknownFieldCount} unknown money fields` : ''}
                 {entry.coverage.unmappedRowCount > 0 ? ` · ${entry.coverage.unmappedRowCount} unmapped rows` : ''}
                 {entry.coverage.sisterBrandExcludedCount > 0 ? ` · ${entry.coverage.sisterBrandExcludedCount} sister-brand rows excluded` : ''}
+                {' · Payout: '}
+                {entry.payout.state === 'known' && entry.payout.value !== null
+                  ? <span className="font-semibold text-slate-700">{formatDecimal(entry.payout.value)}</span>
+                  : <span className="text-amber-700">{entry.payout.state === 'none' ? 'Not supplied' : 'Unavailable'}</span>}
               </span>
             </span>
           </li>

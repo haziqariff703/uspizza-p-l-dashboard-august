@@ -37,6 +37,7 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
     code: 'MY-076', name: 'Vivacity Kuching',
     sources: {
       pos: ['US Pizza Kuching Viva City'],
+      grab: ['US Pizza - Vivacity Megamall'],
       foodpanda: ['US Pizza (Vivacity)'],
       shopee: ['US Pizza - Vivacity Kuching'],
       apps: ['US Pizza - Vivacity'],
@@ -113,8 +114,11 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
   },
   {
     code: 'MY-078', name: 'Lucerne Residence Penang',
+    // One store, several names: "Lucerne Residence", "Lucerne Square", "Lucerne".
     sources: {
       pos: ['US Pizza Lucernce Square, Penang'],
+      grab: ['US Pizza - Lucerne Bayan Lepas'],
+      foodpanda: ['US Pizza (Lucerne Square)'],
       shopee: ['US Pizza - Lucerne Square Penang'],
       apps: ['US Pizza - Lucerne Penang'],
     },
@@ -193,6 +197,7 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
     code: 'MY-004', name: 'SS15',
     sources: {
       pos: ['US Pizza SS15'],
+      grab: ['US Pizza - Jalan SS15'],
       foodpanda: ['US Pizza (SS15)'],
       shopee: ['US Pizza - SS15'],
       apps: ['US PIZZA - SS15'],
@@ -205,6 +210,8 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
       grab: ['US Pizza - Taman Universiti'],
       foodpanda: ['US PIZZA TAMAN UNIVERSITI'],
       shopee: ['US Pizza - Taman Universiti'],
+      // The app files this store under "Taman U Skudai" — same Taman Universiti.
+      apps: ['US PIZZA - Taman U Skudai'],
     },
   },
   {
@@ -290,7 +297,11 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
     code: 'MY-035', name: 'Kamunting Taiping',
     sources: {
       pos: ['US Pizza Kamunting Taiping'],
+      grab: ['US Pizza - Taiping'],
       foodpanda: ['US Pizza (Kamunting Taiping)'],
+      shopee: ['US Pizza - Taiping'],
+      // The app files this store under "Taiping, Perak" — same Kamunting Taiping.
+      apps: ['US PIZZA - Taiping, Perak'],
     },
   },
   {
@@ -325,9 +336,12 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
   },
   {
     code: 'SB-032', name: 'Inanam',
+    // One store, two names: some sheets print "EG Mall Inanam", others just
+    // "Inanam". Both spellings map to the same Inanam outlet on every platform.
     sources: {
-      foodpanda: ['US Pizza (EG Mall Inanam)'],
-      apps: ['US Pizza - Inanam'],
+      pos: ['US Pizza EG Mall Inanam Sabah', 'US Pizza Inanam Sabah'],
+      foodpanda: ['US Pizza (EG Mall Inanam)', 'US Pizza (Inanam)'],
+      apps: ['US Pizza - Inanam', 'US Pizza - EG Mall Inanam'],
     },
   },
   {
@@ -345,6 +359,8 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
     sources: {
       pos: ['US Pizza Kelana Jaya'],
       grab: ['US Pizza - Kelana Jaya'],
+      // Foodpanda files Kelana Jaya on its invoice (PDF), not the xlsx detail.
+      foodpanda: ['US Pizza Kelana Jaya'],
       shopee: ['US Pizza - Kelana Jaya'],
       apps: ['US Pizza - Kelana Jaya'],
     },
@@ -364,7 +380,10 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
     sources: {
       pos: ['US Pizza Simee Ipoh'],
       grab: ['US Pizza - Ipoh Simee'],
+      // Foodpanda and the app both file this store under "Ipoh" — same Simee Ipoh.
+      foodpanda: ['US Pizza Ipoh'],
       shopee: ['US Pizza - SIMEE'],
+      apps: ['US Pizza - Ipoh'],
     },
   },
   {
@@ -391,9 +410,11 @@ export const OUTLET_NAME_MAP: HardcodedOutlet[] = [
     code: 'MY-016', name: 'Skudai',
     sources: {
       pos: ['US Pizza Skudai'],
+      grab: ['US Pizza - Nusa Bestari'],
       foodpanda: ['US Pizza Skudai'],
       shopee: ['US Pizza - Skudai'],
-      apps: ['US PIZZA - Taman U Skudai'],
+      // The app files this store under "Nusa Bestari, Skudai" — same Skudai.
+      apps: ['US Pizza - Nusa Bestari, Skudai'],
     },
   },
   {
@@ -483,7 +504,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza  Central I-City',
     'US Pizza Bandar Dato Onn',
     'US Pizza Bangi Shoplot',
-    'US Pizza EG Mall Inanam Sabah',
     'US Pizza Eco Grandeur Puncak Alam',
     'US Pizza KL Trader Square',
     'US Pizza Kota Masai',
@@ -514,20 +534,15 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza - Bandar Tun Hussein Onn',
     'US Pizza - Cheng',
     'US Pizza - Jalan Ipoh',
-    'US Pizza - Jalan SS15',
     'US Pizza - Kota Kemuning',
     'US Pizza - Lotus\'s Kepong',
-    'US Pizza - Lucerne Bayan Lepas',
     'US Pizza - Melawati',
-    'US Pizza - Nusa Bestari',
     'US Pizza - Presint 15 Putrajaya',
     'US Pizza - Prima Saujana',
     'US Pizza - Seksyen 13 Shah Alam',
     'US Pizza - Selayang',
     'US Pizza - Subang Perdana',
     'US Pizza - Sunshine Mall Farlim',
-    'US Pizza - Taiping',
-    'US Pizza - Vivacity Megamall',
   ],
   foodpanda: [
     'MARSHALL\'S CO @ SIMPANG AMPAT',
@@ -559,7 +574,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza (Kulim)',
     'US Pizza (LSH33 Sentul)',
     'US Pizza (Lotus\'s Kepong)',
-    'US Pizza (Lucerne Square)',
     'US Pizza (Matahari Sri Manja)',
     'US Pizza (Melawati)',
     'US Pizza (Senadin Miri)',
@@ -570,7 +584,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza (Taman Sri Gombak)',
     'US Pizza (USJ 21)',
     'US Pizza (Wangsa Walk)',
-    'US Pizza Ipoh',
     'US Pizza Jalan Ipoh',
     'US Pizza Nilai',
     'US Pizza Prima Saujana',
@@ -582,7 +595,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza - Kulim',
     'US Pizza - Melawati',
     'US Pizza - Sunshine Central',
-    'US Pizza - Taiping',
   ],
   apps: [
     'US PIZZA - Bangi',
@@ -592,7 +604,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US PIZZA - Miri',
     'US PIZZA - Putrajaya',
     'US PIZZA - Shah Alam Seksyen 7',
-    'US PIZZA - Taiping, Perak',
     'US PIZZA - Taman Sri Gombak',
     'US PIZZA - USJ 21',
     'US PIZZA HQ',
@@ -601,7 +612,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza - Bandar Tun Hussein Onn',
     'US Pizza - Bertam',
     'US Pizza - Central i-City',
-    'US Pizza - Ipoh',
     'US Pizza - KL Traders Square',
     'US Pizza - Kajang',
     'US Pizza - Kepong',
@@ -613,7 +623,6 @@ export const NON_HQ_SOURCE_NAMES: Partial<Record<AliasSource, string[]>> = {
     'US Pizza - Matahari Sri Manja',
     'US Pizza - Melawati Mall',
     'US Pizza - Nilai',
-    'US Pizza - Nusa Bestari, Skudai',
     'US Pizza - Puncak Alam',
     'US Pizza - Setia Ecohill',
     'US Pizza - Sunshine',

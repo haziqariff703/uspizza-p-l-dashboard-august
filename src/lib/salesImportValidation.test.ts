@@ -17,6 +17,7 @@ const total = (overrides: Partial<DailyTotal> = {}): DailyTotal => ({
   amounts: {
     grossSales: '100.50', discount: null, netSales: '80', tax: null,
     serviceCharge: null, platformFees: null, advertisingSpend: null, payout: null,
+    commission: null, paymentGatewayFee: null, adjustments: null, totalDeductions: null,
   },
   ...overrides,
 })

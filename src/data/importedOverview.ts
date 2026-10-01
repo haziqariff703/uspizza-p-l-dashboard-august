@@ -4,6 +4,24 @@ import { AMOUNT_UNKNOWN, AMOUNT_ABSENT, amount, addAmounts, subtractAmounts, typ
 export type OverviewValues = { [K in Exclude<keyof OverviewAggregate, 'byPlatform'>]: number | null } & {
   byPlatform: Array<{ [K in keyof PlatformAggregate]: PlatformAggregate[K] extends number ? number | null : PlatformAggregate[K] }>
 }
+/** One outlet's five derived waterfall metrics, per platform. Values are the
+ *  exact-decimal aggregation of the outlet's scoped rows; null = unknown. */
+export interface OutletWaterfall {
+  gross: number | null
+  discount: number | null
+  net: number | null
+  netSC: number | null
+  netSCTax: number | null
+}
+export interface OutletOverview {
+  id: string
+  name: string
+  pos: OutletWaterfall
+  grab: OutletWaterfall
+  foodpanda: OutletWaterfall
+  shopee: OutletWaterfall
+  apps: OutletWaterfall
+}
 export interface ImportedRow {
   sales_date: string
   outlet_name: string
@@ -22,6 +40,10 @@ export interface ImportedRow {
   /** Selected for the row model only. Section 1 does not aggregate these. */
   advertising_spend: number | string | null
   payout: number | string | null
+  commission?: number | string | null
+  payment_gateway_fee?: number | string | null
+  adjustments?: number | string | null
+  total_deductions?: number | string | null
   record_count: number
 }
 const round = (n: number) => Math.round(n * 100) / 100
@@ -48,7 +70,7 @@ export const DERIVED_CHARGES: ReadonlyMap<string, { fields: readonly DerivedFiel
 ])
 
 /** Money fields that may be summed exactly for Section 1. */
-type MoneyKey = 'gross_sales' | 'discount' | 'net_sales' | 'tax' | 'service_charge' | 'payout' | 'platform_fees'
+type MoneyKey = 'gross_sales' | 'discount' | 'net_sales' | 'tax' | 'service_charge' | 'payout' | 'platform_fees' | 'commission' | 'payment_gateway_fee' | 'adjustments' | 'total_deductions'
 
 export function importedOverview(rows: ImportedRow[], scope: EntityScope) {
   // Identity and entity come from the canonical outlet join alone. A row with no
@@ -72,21 +94,24 @@ export function importedOverview(rows: ImportedRow[], scope: EntityScope) {
   // An Amount becomes a displayed figure exactly once, at the boundary.
   const toNumber = (a: Amount): number | null => a.kind === 'value' ? Number(a.value) : null
 
-  const grossMenuA = sumAmounts(pos, 'gross_sales')
-  const netA = sumAmounts(pos, 'net_sales')
+  // POS is its own sales channel (POS-system sales), not an all-channel rollup.
+  // The headline sums every source; a day with no order economics is excluded.
+  const salesRows = scoped.filter(r => !(r.gross_sales === null && r.net_sales === null))
+  const grossMenuA = sumAmounts(salesRows, 'gross_sales')
+  const netA = sumAmounts(salesRows, 'net_sales')
   const discountA = subtractAmounts(grossMenuA, netA)
-  const serviceChargeA = sumAmounts(pos, 'service_charge')
-  const taxA = sumAmounts(pos, 'tax')
+  const serviceChargeA = sumAmounts(salesRows, 'service_charge')
+  const taxA = sumAmounts(salesRows, 'tax')
   const netSCA = addAmounts(netA, serviceChargeA)
   const netSCTaxA = addAmounts(netSCA, taxA)
 
   const byPlatform = PLATFORMS.map(platform => {
-    // An advertising-only day is not an order with unknown sales/tax/payout.
+    // A day with no order economics (advertising-only, or a payout/adjustment
+    // row) is not an order and must not poison the sales sum into unknown.
     const platformRows = scoped.filter(r => r.source === platform && !(
-      r.advertising_spend !== null && r.gross_sales === null && r.net_sales === null && r.payout === null
+      r.gross_sales === null && r.net_sales === null
     ))
-    // POS is all-channel, not a POS-only platform split. Derive the other
-    // columns using the original's basis differences and source-backed payout.
+    // POS is its own sales channel (POS-system sales), summed like the others.
     const basisRows = platformRows
     // Older Grab imports copied tax-inclusive Net Sales into both sales bases
     // and retained negative promotion deductions. Do not present that copied
@@ -113,12 +138,12 @@ export function importedOverview(rows: ImportedRow[], scope: EntityScope) {
       net: toNumber(platformNetA), netSC: toNumber(platformSCA), netSCTax: toNumber(collectedA),
       discount: toNumber(discountA.kind === 'value' ? discountA : subtractAmounts(grossA, platformNetA)),
       serviceCharge: toNumber(scA), tax: toNumber(taxA),
-      settlement, commissionAndFees: toNumber(deductionsA.kind === 'value' ? deductionsA : sumAmounts(basisRows, 'platform_fees')), keptPct,
+      settlement, commissionAndFees: toNumber(deductionsA.kind === 'value' ? deductionsA : sumAmounts(basisRows, 'total_deductions')), keptPct,
     }
   })
 
   const totals: OverviewValues = {
-    outletCount: new Set(pos.map(identity)).size,
+    outletCount: new Set(salesRows.map(identity)).size,
     grossMenu: toNumber(grossMenuA),
     net: toNumber(netA),
     discount: toNumber(discountA),
@@ -130,15 +155,54 @@ export function importedOverview(rows: ImportedRow[], scope: EntityScope) {
     byPlatform,
   }
   const counts = Object.fromEntries(['all', 'myUsPizza', 'sabah'].map(key => [key,
-    new Set(pos.filter(r => key === 'all' || resolved(r)?.entity === ENTITY_NAMES[key as keyof typeof ENTITY_NAMES]).map(identity)).size,
+    new Set(salesRows.filter(r => key === 'all' || resolved(r)?.entity === ENTITY_NAMES[key as keyof typeof ENTITY_NAMES]).map(identity)).size,
   ])) as Record<EntityScope, number>
-  const outlets = [...new Set(pos.map(identity))].map(id => {
-    const group = pos.filter(r => identity(r) === id)
+  const outlets = [...new Set(salesRows.map(identity))].map(id => {
+    const group = salesRows.filter(r => identity(r) === id)
     return { id, name: resolved(group[0])?.name ?? `${group[0].outlet_name} (unmapped)`, net: toNumber(sumAmounts(group, 'net_sales')) }
   }).sort((a, b) => a.name.localeCompare(b.name))
   const coverage = PLATFORMS.map(source => {
     const sourceRows = scoped.filter(r => r.source === source)
     return { source, records: sourceRows.reduce((n, r) => n + r.record_count, 0), days: new Set(sourceRows.map(r => r.sales_date)).size, outlets: new Set(sourceRows.map(identity)).size }
   })
-  return { totals, counts, unmapped, posUnmapped, outlets, coverage }
+
+  // Section 4 reads per-outlet, per-platform derived figures from here so it
+  // never recomputes (and never collapses an unknown to zero). The derivation
+  // mirrors the platform block above: discount = gross − net, net + SC, net + SC + SST.
+  const byOutlet = [...new Set(scoped.map(identity))].map(id => {
+    const group = scoped.filter(r => identity(r) === id)
+    const name = resolved(group[0])?.name ?? `${group[0].outlet_name} (unmapped)`
+    const platform = (source: string) => {
+      // A day with no order economics (advertising-only or payout/adjustment)
+      // is not an order; exclude it so it cannot poison the outlet sum.
+      const rows = group.filter(r => r.source === source && !(
+        r.gross_sales === null && r.net_sales === null
+      ))
+      const legacyGrab = source === 'grab' && rows.some(r => r.discount !== null && Number(r.discount) < 0)
+      const grossA = legacyGrab ? AMOUNT_UNKNOWN : sumAmounts(rows, 'gross_sales')
+      const netA = legacyGrab ? AMOUNT_UNKNOWN : sumAmounts(rows, 'net_sales')
+      const scA = sumAmounts(rows, 'service_charge')
+      const taxA = sumAmounts(rows, 'tax')
+      const netSC = addAmounts(netA, scA)
+      const netSCTax = addAmounts(netSC, taxA)
+      const discountA = subtractAmounts(grossA, netA)
+      return {
+        gross: toNumber(grossA),
+        discount: toNumber(discountA),
+        net: toNumber(netA),
+        netSC: toNumber(netSC),
+        netSCTax: toNumber(netSCTax),
+      }
+    }
+    return {
+      id, name,
+      pos: platform('pos'),
+      grab: platform('grab'),
+      foodpanda: platform('foodpanda'),
+      shopee: platform('shopee'),
+      apps: platform('apps'),
+    }
+  })
+
+  return { totals, counts, unmapped, posUnmapped, outlets, coverage, byOutlet }
 }

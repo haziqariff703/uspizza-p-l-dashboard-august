@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { addAmounts, amount, amountsToJson, AMOUNT_ABSENT, AMOUNT_UNKNOWN, parseDecimal, subtractAmounts, taxFromInclusive } from './decimal'
+import { addAmounts, amount, amountsToJson, AMOUNT_ABSENT, AMOUNT_UNKNOWN, parseDecimal, rateOf, subtractAmounts, taxFromInclusive } from './decimal'
 
 // app_private.sales_amount accepts only this shape; anything else aborts publication.
 const CONTRACT = /^-?[0-9]+(\.[0-9]+)?$/
@@ -67,4 +67,27 @@ test('6% SST inside a tax-inclusive amount rounds half-up to the sen', () => {
 test('an unknown taxable basis can never produce a calculated tax', () => {
   assert.deepEqual(taxFromInclusive(AMOUNT_UNKNOWN), AMOUNT_UNKNOWN)
   assert.deepEqual(taxFromInclusive(AMOUNT_ABSENT), AMOUNT_ABSENT)
+})
+
+test('rateOf divides one amount by another as a percentage to 2 decimal places', () => {
+  // Ground-truth ratios from the August source (Section 2).
+  assert.deepEqual(rateOf(amount('421837.27'), amount('1549319.05')), amount('27.23'))
+  assert.deepEqual(rateOf(amount('30162.90'), amount('150778.53')), amount('20.00'))
+  // A known zero numerator is a real, known 0.00%.
+  assert.deepEqual(rateOf(amount('0'), amount('100')), amount('0.00'))
+  // A negative numerator keeps its sign.
+  assert.deepEqual(rateOf(amount('-8.00'), amount('100')), amount('-8.00'))
+  // Different scales on either side align exactly.
+  assert.deepEqual(rateOf(amount('1'), amount('3')), amount('33.33'))
+  assert.deepEqual(rateOf(amount('0.5'), amount('0.25')), amount('200.00'))
+})
+test('rateOf never divides by a non-value or a zero denominator', () => {
+  assert.deepEqual(rateOf(AMOUNT_UNKNOWN, amount('100')), AMOUNT_UNKNOWN)
+  assert.deepEqual(rateOf(amount('10'), AMOUNT_UNKNOWN), AMOUNT_UNKNOWN)
+  assert.deepEqual(rateOf(AMOUNT_ABSENT, amount('100')), AMOUNT_UNKNOWN)
+  assert.deepEqual(rateOf(amount('10'), AMOUNT_ABSENT), AMOUNT_UNKNOWN)
+  // Every spelling of zero is a zero denominator — never Infinity, never a throw.
+  for (const zero of ['0', '0.00', '0.0', '-0', '-0.00']) {
+    assert.deepEqual(rateOf(amount('10'), amount(zero)), AMOUNT_UNKNOWN, `denominator ${zero}`)
+  }
 })

@@ -118,7 +118,6 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ reportingMon
   const [progress, setProgress] = useState('')
   const [analyzed, setAnalyzed] = useState<AnalyzedFile[] | null>(null)
   const [plan, setPlan] = useState<OutletPlan | null>(null)
-  const [analyzedOwner, setAnalyzedOwner] = useState<string | null>(null)
 
 
   const handleFiles = async (selected: FileList | null) => {
@@ -163,7 +162,6 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ reportingMon
       setProgress('Matching outlets to the P&L list…')
       const usable = parsedFiles.filter(file => file.validation.ok)
       setAnalyzed(parsedFiles)
-      setAnalyzedOwner(current.ownerId)
       setPlan(planPlOutlets(collectStores(usable), current))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The files could not be analysed.')
@@ -193,28 +191,17 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ reportingMon
         throw new Error('Sign in before importing. Imported dashboard data is shared with every signed-in user.')
       }
 
-      // Once a source is available for the selected month, everyone can view
-      // it. Do not create a second copy merely because another user needs it.
-      const fileSources = [...new Set(files.map(item => item.source.toLowerCase()))]
-      const { data: existingImports, error: existingImportsError } = await supabase
-        .from('sales_imports')
-        .select('file_name, source')
-        .eq('reporting_month', `${reportingMonth}-01`)
-        .in('source', fileSources)
-        .eq('status', 'imported')
-        .eq('created_by', auth.user.id)
-        .limit(1)
-      if (existingImportsError) throw new Error(existingImportsError.message)
-      if (existingImports?.length) {
-        throw new Error(`${existingImports[0].source} data for ${monthLabel(reportingMonth)} is already available to all signed-in users (${existingImports[0].file_name}). No upload is needed.`)
-      }
-      if (auth.user.id !== analyzedOwner) {
-        setPlan(null)
-        throw new Error('The signed-in account changed. Read the files again before importing.')
-      }
+      // Outlets and imports are now global (shared by every signed-in user).
+      // "Last import wins": re-importing a source for the same month replaces
+      // its prior sales_daily rows rather than stacking on top of them.
 
       const outcomes: string[] = []
       let importedFiles = 0
+      // "Last import wins" must run once per source, not once per file: a source
+      // imported as several files (POS arrives as five Sales Details reports)
+      // would otherwise delete each sibling's just-written rows, leaving only the
+      // last file. Track which sources have already replaced their prior data.
+      const replacedSources = new Set<string>()
       for (const file of analyzed) {
         const name = file.item.file.name
         if (!file.validation.ok) {
@@ -249,7 +236,32 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ reportingMon
         if (insertError) throw new Error(`${name}: ${insertError.message}`)
 
         try {
-          // 2. Keep the original bytes. No upsert: an import id is used once.
+          // 2. "Last import wins": remove any prior imported rows for this
+          //    month+source so the new import replaces rather than stacks.
+          //    The just-inserted draft (this import) is excluded, or it would
+          //    be deleted here and leave sales_daily with no parent import.
+          //    Runs only for the first file of a source; later files of the same
+          //    source stack alongside it instead of deleting it.
+          if (!replacedSources.has(source)) {
+            replacedSources.add(source)
+            setProgress(`Replacing prior ${source} data…`)
+            const { data: priorImports, error: priorImportsError } = await supabase
+              .from('sales_imports')
+              .select('id')
+              .eq('reporting_month', `${reportingMonth}-01`)
+              .eq('source', source)
+              .eq('status', 'imported')
+              .neq('id', importId)
+            if (priorImportsError) throw priorImportsError
+            const priorIds = ((priorImports ?? []) as Array<{ id: string }>).map(row => row.id)
+            if (priorIds.length) {
+              const { error: priorError } = await supabase.from('sales_daily').delete().in('sales_import_id', priorIds)
+              if (priorError) throw priorError
+              await supabase.from('sales_imports').delete().in('id', priorIds)
+            }
+          }
+
+          // 3. Keep the original bytes. No upsert: an import id is used once.
           setProgress(`Uploading ${name}…`)
           const { error: uploadError } = await supabase.storage.from('sales-imports').upload(storagePath, file.item.file, { upsert: false })
           if (uploadError) throw uploadError
@@ -284,6 +296,10 @@ export const SalesImportModal: React.FC<SalesImportModalProps> = ({ reportingMon
               platform_fees: total.amounts.platformFees,
               advertising_spend: total.amounts.advertisingSpend,
               payout: total.amounts.payout,
+              commission: total.amounts.commission,
+              payment_gateway_fee: total.amounts.paymentGatewayFee,
+              adjustments: total.amounts.adjustments,
+              total_deductions: total.amounts.totalDeductions,
               record_count: total.recordCount,
             })))
             if (dailyError) throw dailyError

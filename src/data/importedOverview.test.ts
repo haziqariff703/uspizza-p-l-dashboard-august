@@ -17,7 +17,7 @@ const pos = {
 }
 
 test('legacy Grab copied sales bases stay unavailable pending reconciliation', () => {
-  const { totals } = importedOverview([{ ...pos, source: 'grab', gross_sales: '100', net_sales: '100', discount: '-20', service_charge: null, tax: '6', payout: '70', platform_fees: '30' }], 'all')
+  const { totals } = importedOverview([{ ...pos, source: 'grab', gross_sales: '100', net_sales: '100', discount: '-20', service_charge: null, tax: '6', payout: '70', total_deductions: '30' }], 'all')
   const grab = totals.byPlatform.find(row => row.platform === 'grab')!
   assert.equal(grab.grossMenu, null)
   assert.equal(grab.net, null)
@@ -38,16 +38,29 @@ test('POS rows compute the exact headline derivation', () => {
   assert.equal(totals.netSCTax, 92.8)
 })
 
-test('platform report rows never inflate the all-channel POS headline', () => {
+test('an advertising-only day does not poison a grab outlet into unknown', () => {
+  const realDay = { ...pos, source: 'grab', gross_sales: '100', net_sales: '80', discount: '20', service_charge: '0', tax: '6', payout: '70', total_deductions: '16' }
+  const advertDay = { ...pos, source: 'grab', sales_date: '2026-08-16', gross_sales: null, net_sales: null, discount: null, advertising_spend: '-154.75', payout: null, service_charge: null, tax: null, total_deductions: null }
+  const { totals, byOutlet } = importedOverview([realDay, advertDay], 'all')
+  const grab = totals.byPlatform.find(p => p.platform === 'grab')!
+  const outlet = byOutlet.find(o => o.id === 'o-greenlane')?.grab
+  // The ad-only row carries no order economics, so it must not erase the real day.
+  assert.equal(grab.grossMenu, 100)
+  assert.equal(grab.net, 80)
+  assert.equal(outlet?.gross, 100)
+  assert.equal(outlet?.net, 80)
+})
+
+test('POS is its own channel and sums with the other platforms', () => {
   const platformRows = [
     { ...pos, source: 'shopee', gross_sales: '50', net_sales: '30', payout: '30' },
     { ...pos, source: 'grab', gross_sales: '40', net_sales: '25', payout: '25' },
   ]
   const combined = importedOverview([pos, ...platformRows], 'all')
   const posOnly = importedOverview([pos], 'all')
-  assert.equal(combined.totals.net, posOnly.totals.net)
-  assert.equal(combined.totals.net, 80)
-  assert.equal(combined.totals.netSCTax, 92.8)
+  // POS + shopee + grab all contribute; POS is not treated as the whole total.
+  assert.equal(posOnly.totals.net, 80)
+  assert.equal(combined.totals.net, 80 + 30 + 25)
 })
 
 test('an unknown money value makes the affected aggregate unknown, never zero', () => {
@@ -135,7 +148,7 @@ test('missing platform tax prevents a partial collected basis or invented fees',
 })
 
 test('known tax and reported deductions remain visible when service charge is unknown', () => {
-  const row = { ...pos, source: 'foodpanda', service_charge: null, platform_fees: '5.36' }
+  const row = { ...pos, source: 'foodpanda', service_charge: null, total_deductions: '5.36' }
   const platform = importedOverview([row], 'all').totals.byPlatform[1]
   assert.equal(platform.tax, 4.8)
   assert.equal(platform.serviceCharge, null)

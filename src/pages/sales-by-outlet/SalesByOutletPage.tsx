@@ -13,10 +13,11 @@ import {
 import { PLATFORM_BRAND } from '../../platformColors';
 import { FULL_OUTLET_SALES } from '../../data/fullOutletSales';
 import { PL_BY_OUTLET } from '../../data/outletData';
-import type { ImportedRow } from '../../data/importedOverview';
+import type { OutletOverview } from '../../data/importedOverview';
 
 type Metric = 'gross' | 'discount' | 'net' | 'netSc' | 'netScTax';
 type ViewMode = 'total' | 'platform';
+type SortOrder = 'high' | 'low';
 type EntityFilter = 'all' | 'myUsPizza' | 'sabah';
 
 const PLATFORM_KEYS = ['Grab', 'FoodPanda', 'Shopee', 'Apps', 'POS'] as const;
@@ -80,62 +81,49 @@ const PlatformLegend = () => (
 
 interface SalesByOutletPageProps {
   entityFilter: EntityFilter;
-  /** When supplied, the chart uses the selected month's imported daily rows. */
-  importedRows?: ImportedRow[];
+  /** When supplied, the chart uses the selected month's derived per-outlet figures. */
+  outletOverviews?: OutletOverview[];
   period?: string;
 }
 
-const IMPORT_SOURCE_TO_PLATFORM: Record<string, PlatformKey> = {
-  grab: 'Grab',
-  foodpanda: 'FoodPanda',
-  shopee: 'Shopee',
-  apps: 'Apps',
-  pos: 'POS',
-};
+/** Maps an OutletOverview's platform key to the derived waterfall metric. */
+const METRIC_OF = {
+  gross: 'gross',
+  discount: 'discount',
+  net: 'net',
+  netSc: 'netSC',
+  netScTax: 'netSCTax',
+} as const satisfies Record<Metric, keyof OutletOverview['pos']>;
 
-export const SalesByOutletPage: React.FC<SalesByOutletPageProps> = ({ entityFilter, importedRows, period }) => {
+export const SalesByOutletPage: React.FC<SalesByOutletPageProps> = ({ entityFilter, outletOverviews, period }) => {
   const [metric, setMetric] = useState<Metric>('gross');
   const [viewMode, setViewMode] = useState<ViewMode>('platform');
+  const [search, setSearch] = useState('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('high');
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
 
-  const rows: Row[] = useMemo(() => {
-    if (importedRows) {
-      const metricKey: keyof Pick<ImportedRow, 'gross_sales' | 'discount' | 'net_sales' | 'service_charge' | 'tax'> =
-        metric === 'gross' ? 'gross_sales' : metric === 'discount' ? 'discount' : 'net_sales';
-      const outletRows = new Map<string, { id: string; name: string; platforms: Record<PlatformKey, number>; posTotal: number; hasPos: boolean }>();
+  const allRows: Row[] = useMemo(() => {
+    if (outletOverviews) {
+      const field = METRIC_OF[metric];
+      // POS is its own sales channel (POS-system sales), summed with the others.
+      const platformValues = (o: OutletOverview): Record<PlatformKey, number> => ({
+        Grab: o.grab[field] ?? 0,
+        FoodPanda: o.foodpanda[field] ?? 0,
+        Shopee: o.shopee[field] ?? 0,
+        Apps: o.apps[field] ?? 0,
+        POS: o.pos[field] ?? 0,
+      });
 
-      for (const imported of importedRows) {
-        if (entityFilter === 'sabah' && imported.entity !== 'Sabah') continue;
-        if (entityFilter === 'myUsPizza' && imported.entity !== 'MY US PIZZA') continue;
-        const platform = IMPORT_SOURCE_TO_PLATFORM[imported.source.toLowerCase()];
-        if (!platform) continue;
-        const id = imported.outlet_id ?? `${imported.source}:${imported.outlet_name}`;
-        const current = outletRows.get(id) ?? {
-          id,
-          name: imported.outlet_name,
-          platforms: { Grab: 0, FoodPanda: 0, Shopee: 0, Apps: 0, POS: 0 },
-          posTotal: 0,
-          hasPos: false,
-        };
-        const base = Number(imported[metricKey] ?? 0);
-        const serviceCharge = Number(imported.service_charge ?? 0);
-        const tax = Number(imported.tax ?? 0);
-        const value = metric === 'netSc' ? base + serviceCharge : metric === 'netScTax' ? base + serviceCharge + tax : base;
-        current.platforms[platform] += value;
-        if (platform === 'POS') {
-          current.posTotal += value;
-          current.hasPos = true;
-        }
-        outletRows.set(id, current);
-      }
-
-      return [...outletRows.values()]
-        .map((outlet) => ({
-          id: outlet.id,
-          name: outlet.name,
-          // POS is the trusted total because it already includes marketplace sales.
-          total: outlet.hasPos ? outlet.posTotal : PLATFORM_KEYS.reduce((sum, key) => sum + outlet.platforms[key], 0),
-          ...outlet.platforms,
-        }))
+      return outletOverviews
+        .map((o) => {
+          const platforms = platformValues(o);
+          return {
+            id: o.id,
+            name: o.name,
+            total: PLATFORM_KEYS.reduce((sum, key) => sum + platforms[key], 0),
+            ...platforms,
+          };
+        })
         .sort((a, b) => b.total - a.total);
     }
 
@@ -176,20 +164,25 @@ export const SalesByOutletPage: React.FC<SalesByOutletPageProps> = ({ entityFilt
       .map((o) => {
         return o;
       });
-  }, [entityFilter, importedRows, metric]);
+  }, [entityFilter, outletOverviews, metric]);
+  const rows = useMemo(() => allRows
+    .filter((row) => row.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+    .sort((a, b) => (sortOrder === 'high' ? b.total - a.total : a.total - b.total) || a.name.localeCompare(b.name)),
+  [allRows, search, sortOrder]);
+  const pinned = rows.find((row) => row.id === pinnedId);
 
   const getMetricTitle = () => {
     switch (metric) {
       case 'gross':
-        return 'Gross Sales per HQ outlet · Menu selling price · sorted high → low';
+        return 'Gross Sales per HQ outlet · Menu selling price';
       case 'discount':
-        return 'Discount per HQ outlet · Gross sales − net sales · sorted high → low';
+        return 'Discount per HQ outlet · Gross sales − net sales';
       case 'net':
-        return 'Net Sales per HQ outlet · Menu price – discount · sorted high → low';
+        return 'Net Sales per HQ outlet · Menu price – discount';
       case 'netSc':
-        return 'Net + Service Charge per HQ outlet · + 10% service charge (dine-in) · sorted high → low';
+        return 'Net + Service Charge per HQ outlet · + 10% service charge (dine-in)';
       case 'netScTax':
-        return 'Net + SC + Tax per HQ outlet · + 6% SST · sorted high → low';
+        return 'Net + SC + Tax per HQ outlet · + 6% SST';
     }
   };
 
@@ -302,16 +295,28 @@ export const SalesByOutletPage: React.FC<SalesByOutletPageProps> = ({ entityFilt
       </div>
 
       {/* Subtitle */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input aria-label="Search outlets" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search outlet"
+          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-400 sm:max-w-56" />
+        <button type="button" onClick={() => setSortOrder((order) => order === 'high' ? 'low' : 'high')}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-400">
+          {sortOrder === 'high' ? 'High → Low' : 'Low → High'}
+        </button>
+      </div>
+      {pinned && <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm" aria-live="polite">
+        <CustomTooltip active payload={[{ payload: pinned }]} />
+        <button type="button" onClick={() => setPinnedId(null)} className="shrink-0 font-semibold text-slate-500 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-400" aria-label="Clear selected outlet">Clear</button>
+      </div>}
       <div>
         <div className="text-xs font-bold text-slate-700">{getMetricTitle()}</div>
-        {importedRows && viewMode === 'platform' && (
-          <p className="mt-1 text-[11px] text-slate-500">Platform bars show each imported source. POS is not added to the total because it already includes all channels.</p>
+        {outletOverviews && viewMode === 'platform' && (
+          <p className="mt-1 text-[11px] text-slate-500">Platform bars show each imported source. POS is its own sales channel and is summed with the others.</p>
         )}
       </div>
 
       {/* Ranked horizontal bar list */}
       <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:p-4">
-        <div style={{ width: '100%', height: Math.max(rows.length * 36 + 120, 200) }}>
+        {rows.length ? <div style={{ width: '100%', height: Math.max(rows.length * 36 + 120, 200) }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               layout="vertical"
@@ -340,7 +345,8 @@ export const SalesByOutletPage: React.FC<SalesByOutletPageProps> = ({ entityFilt
                 content={<PlatformLegend />}
               />
               {viewMode === 'total' ? (
-                <Bar dataKey="total" name={totalLabel} fill={TOTAL_COLOR} radius={[0, 3, 3, 0]}>
+                <Bar dataKey="total" name={totalLabel} fill={TOTAL_COLOR} radius={[0, 3, 3, 0]} cursor="pointer"
+                  onClick={(row: Row) => setPinnedId((id) => id === row.id ? null : row.id)}>
                   <LabelList
                     dataKey="total"
                     position="right"
@@ -357,6 +363,8 @@ export const SalesByOutletPage: React.FC<SalesByOutletPageProps> = ({ entityFilt
                       name={key}
                       stackId="platform"
                       fill={PLATFORM_COLORS[key]}
+                      cursor="pointer"
+                      onClick={(row: Row) => setPinnedId((id) => id === row.id ? null : row.id)}
                       radius={isFinalStack ? [0, 3, 3, 0] : undefined}
                     >
                       {isFinalStack && (
@@ -372,7 +380,7 @@ export const SalesByOutletPage: React.FC<SalesByOutletPageProps> = ({ entityFilt
               )}
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </div> : <p className="py-8 text-center text-xs text-slate-500">No outlets match your search.</p>}
 
       </div>
     </div>

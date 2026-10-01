@@ -61,21 +61,21 @@ export function planPlOutlets(stores: SourceStore[], directory: OutletDirectory)
 }
 
 /** Create missing master records automatically; never overwrite existing financial identities. */
-export async function ensurePlDirectory(): Promise<OutletDirectory & { ownerId: string }> {
+export async function ensurePlDirectory(): Promise<OutletDirectory> {
   const db = getSupabaseClient()
   const { data: auth, error: authError } = await db.auth.getUser()
   if (authError || !auth.user) throw new Error('Sign in before importing.')
-  const userId = auth.user.id
+  // Outlets are now global: one canonical row per code, shared by every user.
   const read = async () => {
-    const { data, error } = await db.from('outlets').select('id, name, code, entity').eq('created_by', userId)
+    const { data, error } = await db.from('outlets').select('id, name, code, entity')
     if (error) throw error
     return (data ?? []) as DirectoryOutlet[]
   }
   let outlets = await read()
   const missing = PL_MASTER.filter(master => !outlets.some(row => row.code === master.code))
   if (missing.length) {
-    const { error } = await db.from('outlets').upsert(missing.map(row => ({ ...row, created_by: userId })), {
-      onConflict: 'created_by,code', ignoreDuplicates: true,
+    const { error } = await db.from('outlets').upsert(missing.map(row => ({ ...row })), {
+      onConflict: 'code', ignoreDuplicates: true,
     })
     if (error) throw error
     outlets = await read()
@@ -83,7 +83,7 @@ export async function ensurePlDirectory(): Promise<OutletDirectory & { ownerId: 
   const conflicting = PL_MASTER.filter(master => !outlets.some(row => row.code === master.code
     && normalizeOutletName(row.name) === normalizeOutletName(master.name) && row.entity === master.entity))
   if (conflicting.length) throw new Error(`Database outlet records differ from the P&L master: ${conflicting.map(row => row.name).join(', ')}. Import stopped.`)
-  return { outlets: outlets.filter(row => PL_MASTER.some(master => master.code === row.code)), aliases: {}, ownerId: userId }
+  return { outlets: outlets.filter(row => PL_MASTER.some(master => master.code === row.code)), aliases: {} }
 }
 
 /** Different source spellings may resolve to the same outlet/day. Merge before INSERT. */

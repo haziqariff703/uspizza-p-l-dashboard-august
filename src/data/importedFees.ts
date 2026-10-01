@@ -1,4 +1,4 @@
-import { addAmounts, amount, AMOUNT_ABSENT, AMOUNT_UNKNOWN, type Amount } from '../lib/decimal'
+import { addAmounts, amount, AMOUNT_ABSENT, AMOUNT_UNKNOWN, rateOf, type Amount } from '../lib/decimal'
 import { ENTITY_NAMES, type EntityScope } from './aggregate'
 import type { ChannelFilter } from '../types'
 import type { ImportedRow } from './importedOverview'
@@ -16,6 +16,7 @@ import {
   type FeeCoverageLabel,
   type FeePlatformId,
   type FeePlatformView,
+  type FeeRate,
   type FeesViewModel,
 } from './feesViewModel'
 
@@ -74,10 +75,10 @@ export interface ImportedFeeSummary {
 }
 
 const SOURCE_NOTES: Record<FeeSource, string> = {
-  grab: 'Combined deductions available; itemized commission requires persisted source detail.',
-  foodpanda: 'Combined deductions only for loaded Excel-detail invoices; PDF-only invoices remain outside this total.',
-  shopee: 'Fees and payout are not supplied by the current export; nothing is derived from it.',
-  apps: 'No gateway fee or payout source is supplied; delivery fee is not a gateway fee.',
+  grab: 'Itemized commission, platform fee and adjustments are parsed from the payment columns; gateway and adjustments stay unavailable where the export does not state them.',
+  foodpanda: 'Itemized commission and fee tax parsed for loaded Excel-detail invoices; PDF-only invoices remain outside this total.',
+  shopee: 'Commission, gateway and adjustments are not supplied by the current export; nothing is derived from them.',
+  apps: 'No commission, gateway fee or payout source is supplied; delivery fee is not a gateway fee.',
   pos: 'Sales-only report; excluded from platform-fee and payout totals.',
 }
 
@@ -86,7 +87,7 @@ const sourceForFilter = (filter: ChannelFilter): FeeSource | null =>
 
 /** One field's three-state aggregate. A null/undefined cell is `unknown` (the
  *  field applies but was not supplied); an empty set is `none`. */
-function sumField(rows: ImportedRow[], field: 'platform_fees' | 'advertising_spend' | 'payout'): { value: KnownAmount; state: FieldState } {
+function sumField(rows: ImportedRow[], field: 'platform_fees' | 'advertising_spend' | 'payout' | 'commission' | 'payment_gateway_fee' | 'adjustments' | 'net_sales'): { value: KnownAmount; state: FieldState } {
   if (!rows.length) return { value: null, state: 'none' }
   const values: Amount[] = rows.map(row => {
     const value = row[field]
@@ -156,18 +157,18 @@ export function importedFees(
 /*  Section 2 view-model (live adapter)                                        */
 /* -------------------------------------------------------------------------- */
 
-/** The daily aggregate rows persist only `platform_fees`, `advertising_spend`
- *  and `payout`. Commission, payment-gateway fees and signed adjustments are
- *  not stored separately, so their live cells can never be `known`. */
+/** The daily aggregate rows persist `commission`, `payment_gateway_fee`,
+ *  `adjustments`, `platform_fees`, `advertising_spend` and `payout`. Fields the
+ *  source never states stay `unknown`, never a fabricated zero. */
 const LIVE_NOTES: Record<FeePlatformId, string> = {
-  Grab: 'Combined deductions available; itemized commission, gateway and signed adjustments require persisted source detail. Advertising counts every explicit advertising row; Grab Advertisement-category classification is not persisted yet.',
-  FoodPanda: 'Combined deductions only for loaded Excel-detail invoices; PDF-only invoices remain outside this total. Customer-targeting fees are not classified as advertising until Finance confirms the definition.',
-  Shopee: 'Shopee exports carry no separate fee or remittance field, so fees, payout, gateway and adjustments stay unavailable. Nothing is derived from Transaction Amount minus Earnings.',
-  Apps: 'No gateway/remittance source is imported; delivery fee and Razerpay payment method are not gateway-fee evidence.',
+  Grab: 'Commission is the itemized order/step-up/GrabKitchen columns; platform fee is Grab Fee + Restaurant Packaging Charge. Gateway and signed adjustments are unknown until the export states them. Advertising counts every explicit advertising row.',
+  FoodPanda: 'Commission is foodpanda Commission; fee tax (SST on commission) sits in adjustments. PDF-only invoices remain outside this total.',
+  Shopee: 'Shopee exports carry no commission, gateway or adjustment field, so those stay unavailable. Nothing is derived from Transaction Amount minus Earnings.',
+  Apps: 'No commission, gateway/remittance source is imported; delivery fee is not gateway-fee evidence.',
 }
 
 const LIVE_SOURCE_NOTE =
-  'Live imported daily fields only. Platform / service fees are combined deductions, not the original itemized categories. POS is a sales-coverage reference and is excluded from fee totals. Sister-brand and unmapped rows are excluded and counted in the coverage disclosure.'
+  'Live imported daily fields only. Platform / service fees are the narrow itemized platform fee, with commission, gateway and adjustments as separate categories. POS is a sales-coverage reference and is excluded from fee totals. Sister-brand and unmapped rows are excluded and counted in the coverage disclosure.'
 
 /** Reports loaded for the month that are not complete imports. Retained in the
  *  view-model for the coverage disclosure even though the fetcher only loads
@@ -239,24 +240,22 @@ export function importedFeesViewModel(
     const sourceRows = selected && source !== selected ? [] : scoped.filter(row => row.source === source)
     const platformFees = toCell(sumField(sourceRows, 'platform_fees'))
     const advertising = toCell(sumField(sourceRows, 'advertising_spend'))
-
-    // Commission, payment gateway and adjustments are not persisted, so their
-    // state follows the source itself: no rows -> `none`, rows -> `unknown`.
-    const structuralState: FieldState = sourceRows.length ? 'unknown' : 'none'
-    const structuralCell = (): FeeCell => (structuralState === 'none' ? ABSENT_CELL : UNKNOWN_CELL)
+    const payout = toCell(sumField(sourceRows, 'payout'))
+    const commission = toCell(sumField(sourceRows, 'commission'))
+    const paymentGateway = toCell(sumField(sourceRows, 'payment_gateway_fee'))
+    const adjustments = toCell(sumField(sourceRows, 'adjustments'))
 
     const cells: Record<FeeCategoryKey, FeeCell> = {
-      commission: structuralCell(),
+      commission,
       advertising,
       platformFees,
-      paymentGateway: structuralCell(),
-      adjustments: structuralCell(),
+      paymentGateway,
+      adjustments,
     }
 
     // A complete total requires every category whose source is present to be
-    // known. Today only platformFees + advertising can be known, and the other
-    // three are `unknown` whenever rows exist — so the total is never complete
-    // for a platform with live rows.
+    // known. Once commission, gateway and adjustments are persisted they can be
+    // known too; until then they stay `unknown` whenever rows exist.
     const applicable: FeeCell[] = [cells.commission, cells.advertising, cells.platformFees, cells.paymentGateway, cells.adjustments]
     const anyUnknown = applicable.some(cell => cell.state === 'unknown')
     const valueCells = applicable.filter((cell): cell is FeeCell & { value: string } => cell.state === 'known' && cell.value !== null)
@@ -268,6 +267,17 @@ export function importedFeesViewModel(
       : partialSum.kind === 'value'
         ? knownCell(partialSum.value)
         : ABSENT_CELL
+
+    // The rate divides commission by the SAME pre-tax net sales of the same
+    // scoped rows — never another platform, period or scope.
+    const netSales = sumField(sourceRows, 'net_sales')
+    const rateAmount = rateOf(
+      commission.value === null ? AMOUNT_UNKNOWN : amount(commission.value),
+      netSales.value === null ? AMOUNT_UNKNOWN : amount(netSales.value),
+    )
+    const commissionRate: FeeRate = commission.state === 'known' && netSales.state === 'known' && rateAmount.kind === 'value'
+      ? { value: rateAmount.value, state: 'known' }
+      : { value: null, state: commission.state === 'none' ? 'none' : 'unknown' }
 
     const failedForSource = failedImports.filter(entry => entry.source === source)
     const label: FeeCoverageLabel =
@@ -281,9 +291,8 @@ export function importedFeesViewModel(
       cells,
       total,
       totalPartialValue: total.state === 'unknown' && partialSum.kind === 'value' ? partialSum.value : null,
-      // No persisted denominator means no valid live rate. Never divide an
-      // unknown commission by an assumed net-sales figure.
-      commissionRate: { value: null, state: 'none' },
+      commissionRate,
+      payout,
       coverage,
       note: LIVE_NOTES[platform],
       absent: sourceRows.length === 0,
@@ -316,6 +325,17 @@ export function importedFeesViewModel(
   const advertisingSpend: FeeCell = advertisingKnown && advertisingSum.kind === 'value'
     ? knownCell(advertisingSum.value)
     : advertisingCells.every(cell => cell.state === 'none')
+      ? ABSENT_CELL
+      : UNKNOWN_CELL
+
+  const commissionCells = platforms.map(entry => entry.cells.commission)
+  const commissionKnown = commissionCells.every(cell => cell.state === 'known' && cell.value !== null)
+  const commissionSum = commissionCells.every(cell => cell.value !== null)
+    ? addAmounts(...commissionCells.map(cell => amount(cell.value!)))
+    : AMOUNT_UNKNOWN
+  const commissionTotal: FeeCell = commissionKnown && commissionSum.kind === 'value'
+    ? knownCell(commissionSum.value)
+    : commissionCells.every(cell => cell.state === 'none')
       ? ABSENT_CELL
       : UNKNOWN_CELL
 
@@ -355,8 +375,7 @@ export function importedFeesViewModel(
     platforms,
     totals: {
       advertisingSpend,
-      // Commission is not persisted separately, so the live KPI is unavailable.
-      commission: UNKNOWN_CELL,
+      commission: commissionTotal,
       totalFees,
       totalFeesPartialValue: totalFees.state === 'unknown' && totalPartial.kind === 'value' ? totalPartial.value : null,
     },

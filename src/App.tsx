@@ -13,6 +13,9 @@ import { CreateTaskModal } from './components/TaskTracker/CreateTaskModal';
 import { OutletCoverageMatrix } from './components/OutletMatrix/OutletCoverageMatrix';
 import { SalesDashboard } from './components/SalesDashboard/SalesDashboard';
 import { LiveActivityFeed } from './components/RealTimeActivity/LiveActivityFeed';
+import { SignSection } from './components/SalesDashboard/SignSection';
+import { AuthForm } from './components/SalesDashboard/AuthForm';
+import { useSessionEmail } from './lib/useSessionEmail';
 
 import { 
   INITIAL_TASKS, 
@@ -30,6 +33,9 @@ import {
 } from './types';
 
 export default function App() {
+  // Auth: gate the entire app behind sign-in.
+  const { userEmail, status: sessionStatus, isRecovery } = useSessionEmail();
+
   // Primary States
   const [tasks, setTasks] = useState<UserTask[]>(INITIAL_TASKS);
   const [outlets, setOutlets] = useState<OutletFinancialData[]>(INITIAL_OUTLETS);
@@ -381,6 +387,47 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isLiveSync, handleSimulateEvent]);
 
+  // A password-recovery session lands here with a live user; show the
+  // full-page "set a new password" form before letting them into the app.
+  if (isRecovery) {
+    return (
+      <div className="min-h-screen bg-slate-100/70 text-slate-900 font-sans selection:bg-rose-500 selection:text-white">
+        <section className="flex min-h-screen w-full items-center justify-center px-4 py-10">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+            <AuthForm initialMode="reset-password" onSuccess={() => window.location.reload()} />
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  // Auth not resolved yet: render a neutral splash so a signed-out visitor
+  // never sees dashboard chrome, and a signed-in user never sees a flash of
+  // the sign-in page. Nothing from the app is mounted until auth is `ready`.
+  if (sessionStatus === 'loading') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100/70 text-slate-900 font-sans">
+        <span
+          role="status"
+          aria-live="polite"
+          className="text-xs font-semibold uppercase tracking-widest text-slate-400"
+        >
+          Loading…
+        </span>
+      </div>
+    );
+  }
+
+  // Signed out: the landing page replaces the entire app — no TopBar, no
+  // footer, no modals. All hooks above must run unconditionally first.
+  if (!userEmail) {
+    return (
+      <div className="min-h-screen bg-slate-100/70 text-slate-900 font-sans selection:bg-rose-500 selection:text-white">
+        <SignSection />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-900 font-sans selection:bg-rose-500 selection:text-white">
       
@@ -417,7 +464,6 @@ export default function App() {
 
         {/* App Body Content */}
         <main className="min-w-0 flex-1 space-y-6 px-5 py-6 lg:px-8">
-        
         {/* VIEW 1: USER TASKS & REAL-TIME TRACKER */}
         {currentTab === 'tasks' && (
           <div className="space-y-6 animate-in fade-in duration-200">

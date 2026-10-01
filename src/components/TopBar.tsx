@@ -24,7 +24,7 @@ const SECTION_OPTIONS: { id: DashboardSection; number: number; label: string; de
   { id: 'salesByOutlet', number: 4, label: 'Sales by Outlet', description: copy.navDescSalesByOutlet },
   { id: 'purchasesByOutlet', number: 5, label: 'Purchases by Outlet', description: copy.navDescPurchasesByOutlet },
   { id: 'purchasesToNetSales', number: 6, label: 'Purchases-to-Net Sales', description: 'GRN purchases as a share of net sales' },
-  { id: 'plByOutlet', number: 7, label: 'P&L by Outlet', description: copy.navDescPLByOutlet },
+  { id: 'plByOutlet', number: 7, label: 'Gross Profit by Outlet', description: copy.navDescPLByOutlet },
 ];
 
 export interface TopBarProps {

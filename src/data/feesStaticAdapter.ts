@@ -68,6 +68,7 @@ const platformView = (platform: FeePlatformId, outlets: number): FeePlatformView
     paymentGateway: cellFrom(fees.paymentGateway),
     adjustments: cellFrom(fees.adjustments),
   } satisfies Record<FeeCategoryKey, FeeCell>
+  const settlement = PLATFORM_SETTLEMENTS.find((entry) => entry.platform === platform)
   return {
     platform,
     source: FEE_SOURCE_IDS[platform],
@@ -75,6 +76,7 @@ const platformView = (platform: FeePlatformId, outlets: number): FeePlatformView
     total: cellFrom(fees.totalFees),
     totalPartialValue: null,
     commissionRate: rateCell(fees.rate),
+    payout: settlement ? cellFrom(settlement.netSettlement) : ABSENT_CELL,
     coverage: staticCoverage(outlets),
     note: staticNote(platform),
     absent: false,

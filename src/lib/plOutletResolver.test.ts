@@ -52,6 +52,56 @@ test('outlets that opened after the May P&L now count, without entering the May 
   assert.equal(PL_BY_OUTLET.some(row => row.code === 'MY-051' || row.code === 'MY-081'), false)
 })
 
+test('Grab spellings for the five previously-excluded outlets resolve to their HQ outlet', () => {
+  const spellings: Array<[AliasSource, string, string]> = [
+    ['grab', 'US Pizza - Jalan SS15', 'MY-004'],
+    ['grab', 'US Pizza - Nusa Bestari', 'MY-016'],
+    ['grab', 'US Pizza - Taiping', 'MY-035'],
+    ['grab', 'US Pizza - Vivacity Megamall', 'MY-076'],
+    ['grab', 'US Pizza - Lucerne Bayan Lepas', 'MY-078'],
+  ]
+  for (const [source, name, code] of spellings) {
+    assert.equal(planPlOutlets([store(name, source)], directory).approved[0]?.outlet?.code, code, name)
+  }
+  // These platform spellings must no longer be treated as somebody else's store.
+  for (const [source, name] of spellings) {
+    assert.equal(NON_HQ_SOURCE_NAMES[source]?.includes(name) ?? false, false, name)
+  }
+})
+
+test('reclassified outlet spellings resolve to their HQ outlet across every platform', () => {
+  const spellings: Array<[AliasSource, string, string]> = [
+    // Simee Ipoh: app and foodpanda both file it under "Ipoh".
+    ['apps', 'US Pizza - Ipoh', 'MY-018'],
+    ['foodpanda', 'US Pizza Ipoh', 'MY-018'],
+    // Kamunting Taiping: shopee files it under "Taiping", the app under "Taiping, Perak".
+    ['shopee', 'US Pizza - Taiping', 'MY-035'],
+    ['apps', 'US PIZZA - Taiping, Perak', 'MY-035'],
+    // Taman Universiti: the app files it under "Taman U Skudai".
+    ['apps', 'US PIZZA - Taman U Skudai', 'MY-017'],
+    // Skudai: the app files it under "Nusa Bestari, Skudai".
+    ['apps', 'US Pizza - Nusa Bestari, Skudai', 'MY-016'],
+    // Inanam: one store printed as "EG Mall Inanam" or just "Inanam".
+    ['pos', 'US Pizza EG Mall Inanam Sabah', 'SB-032'],
+    ['pos', 'US Pizza Inanam Sabah', 'SB-032'],
+    ['foodpanda', 'US Pizza (EG Mall Inanam)', 'SB-032'],
+    ['foodpanda', 'US Pizza (Inanam)', 'SB-032'],
+    ['apps', 'US Pizza - Inanam', 'SB-032'],
+    ['apps', 'US Pizza - EG Mall Inanam', 'SB-032'],
+    // Lucerne Residence = Lucerne Square on foodpanda.
+    ['foodpanda', 'US Pizza (Lucerne Square)', 'MY-078'],
+    // Kelana Jaya on the foodpanda invoice (PDF, not xlsx).
+    ['foodpanda', 'US Pizza Kelana Jaya', 'MY-001'],
+  ]
+  for (const [source, name, code] of spellings) {
+    assert.equal(planPlOutlets([store(name, source)], directory).approved[0]?.outlet?.code, code, name)
+  }
+  // These platform spellings must no longer be treated as somebody else's store.
+  for (const [source, name] of spellings) {
+    assert.equal(NON_HQ_SOURCE_NAMES[source]?.includes(name) ?? false, false, name)
+  }
+})
+
 test('Mydin Subang Jaya and Mydin USJ are one outlet across every source', () => {
   const spellings: Array<[AliasSource, string]> = [
     ['pos', 'US Pizza Mydin Subang Jaya'],

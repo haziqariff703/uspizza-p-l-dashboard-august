@@ -89,8 +89,9 @@ export interface FeeCoverage {
 }
 
 /** A derived commission rate is only valid when both the commission numerator
- *  and its Finance-approved net-sales denominator are known. Today only the
- *  denominator is persisted, so live rates stay unavailable. */
+ *  and its Finance-approved net-sales denominator are known. The numerator is
+ *  the itemized commission column; the denominator is pre-tax net sales over the
+ *  same scoped rows. */
 export interface FeeRate {
   value: string | null
   state: FieldState
@@ -108,6 +109,10 @@ export interface FeePlatformView {
   total: FeeCell
   totalPartialValue: string | null
   commissionRate: FeeRate
+  /** The platform's own reported settlement/payable amount for the period —
+   *  informational, never summed into `total` (deductions and payout are not
+   *  the same axis, and a platform can report one without the other). */
+  payout: FeeCell
   coverage: FeeCoverage
   /** Source-specific limitation, written once and rendered as a data note. */
   note: string

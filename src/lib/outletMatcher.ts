@@ -134,9 +134,6 @@ export function matchSourceStore(
 
   const byId = (id: string | undefined) => directory.outlets.find(outlet => outlet.id === id)
 
-  if (isSisterBrand(store.name)) {
-    return decide('excluded', null, null, 'Sister brand — its sales are not ours.')
-  }
   if (!store.name.trim()) {
     return decide('reject', null, null, 'The file gave no outlet name for these rows.')
   }
@@ -147,9 +144,16 @@ export function matchSourceStore(
     if (matched) return decide('automatic', matched, 'store-id', `Store ID ${store.externalStoreId}.`)
   }
 
-  // 2. An alias somebody already confirmed, for this source only.
+  // 2. An alias somebody already confirmed, for this source only. A confirmed
+  //    alias wins over the sister-brand denylist: a reviewer has explicitly
+  //    said this source spelling is ours, so it is not silently dropped.
   const exactAlias = byId(directory.aliases[directoryKey(store.source, store.name)])
   if (exactAlias) return decide('automatic', exactAlias, 'alias', 'Already mapped for this source.')
+
+  // A sister brand with no confirmed identity above is not ours to count.
+  if (isSisterBrand(store.name)) {
+    return decide('excluded', null, null, 'Sister brand — its sales are not ours.')
+  }
 
   const normalized = normalizeOutletName(store.name)
   const aliasIndex = new Map<string, Set<string>>()

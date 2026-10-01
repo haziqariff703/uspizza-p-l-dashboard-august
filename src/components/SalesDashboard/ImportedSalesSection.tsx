@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CheckCircle, RefreshCircle, WarningTriangle } from 'iconoir-react'
 import { getSupabaseClient } from '../../lib/supabase'
 import { importedOverview, type ImportedRow } from '../../data/importedOverview'
@@ -41,6 +41,10 @@ interface JoinedSalesRow {
   platform_fees: number | string | null
   advertising_spend: number | string | null
   payout: number | string | null
+  commission: number | string | null
+  payment_gateway_fee: number | string | null
+  adjustments: number | string | null
+  total_deductions: number | string | null
   record_count: number
   outlet_id: string
   outlets: JoinedOutlet | null
@@ -78,11 +82,64 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
   const [message, setMessage] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState('')
+  // Bumped by the danger-zone delete to reload this month's figures after the
+  // rows are removed, without touching the parent's import refresh token.
+  const [localReloadToken, setLocalReloadToken] = useState(0)
   // Imported figures are shared across every signed-in account, so the cache
   // scope is the reporting month rather than the identity that uploaded them.
   const loadedScopeRef = useRef<string | null>(null)
 
   const reloadDirectory = () => { void loadOutletDirectory().then(setDirectory).catch(() => setDirectory(EMPTY_DIRECTORY)) }
+
+  /**
+   * Deletes every imported sheet for the current reporting month — the sales
+   * import records and, transitively, their cascaded `sales_daily` rows — plus
+   * the original files in Storage. Owner-scoped: only the importing user's rows
+   * are removed (the simple-prototype schema has no organization_id; ownership
+   * is `created_by`). Returns a human summary for the toast.
+   */
+  const deleteMonthSheets = useCallback(async (): Promise<string> => {
+    const supabase = getSupabaseClient()
+    const { data: auth, error: authError } = await supabase.auth.getUser()
+    if (authError || !auth.user) throw new Error('Sign in before deleting imported data.')
+
+    const month = `${reportingMonth}-01`
+    // Fetch the owning import ids first, so the row delete and the Storage
+    // cleanup both target exactly the month's sheets.
+    const { data: imports, error: listError } = await supabase
+      .from('sales_imports')
+      .select('id, file_name')
+      .eq('reporting_month', month)
+      .eq('created_by', auth.user.id)
+    if (listError) throw new Error(listError.message)
+
+    const owned = (imports ?? []) as Array<{ id: string; file_name: string }>
+
+    // sales_daily rows cascade from sales_imports on delete, so removing the
+    // import records is enough to clear the daily totals.
+    if (owned.length) {
+      const { error: deleteError } = await supabase
+        .from('sales_imports')
+        .delete()
+        .in('id', owned.map(row => row.id))
+      if (deleteError) throw new Error(deleteError.message)
+    }
+
+    // Remove the original files. Storage is independent of the rows, and the
+    // import record is already gone, so derive the path the same way the import
+    // modal wrote it: <userId>/<importId>/<sanitized file_name>. A per-file
+    // failure is logged, not fatal — the financial rows are already deleted.
+    const safeName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const paths = owned.map(row => `${auth.user!.id}/${row.id}/${safeName(row.file_name)}`)
+    if (paths.length) {
+      const { error: rmError } = await supabase.storage.from('sales-imports').remove(paths)
+      if (rmError) console.warn('[delete-sheets] storage remove failed', rmError.message)
+    }
+
+    // Reload this month so the emptied coverage renders immediately.
+    setLocalReloadToken(token => token + 1)
+    return `${owned.length.toLocaleString()} sheet${owned.length === 1 ? '' : 's'} deleted for ${reportingMonth}.`
+  }, [reportingMonth])
 
   useEffect(() => {
     let active = true
@@ -127,6 +184,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
             .select(`
               sales_date, gross_sales, discount, net_sales, tax, service_charge,
               platform_fees, advertising_spend, payout, record_count, outlet_id,
+              commission, payment_gateway_fee, adjustments, total_deductions,
               outlets ( name, code, entity ),
               sales_imports!inner ( reporting_month, source, status )
             `)
@@ -171,6 +229,10 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
           platform_fees: row.platform_fees,
           advertising_spend: row.advertising_spend,
           payout: row.payout,
+          commission: row.commission,
+          payment_gateway_fee: row.payment_gateway_fee,
+          adjustments: row.adjustments,
+          total_deductions: row.total_deductions,
           record_count: row.record_count,
         })))
         setPurchases(bought.map(row => purchaseRowFromGRN(row, month)))
@@ -196,7 +258,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
     }
     void load()
     return () => { active = false }
-  }, [reportingMonth, refreshToken])
+  }, [reportingMonth, refreshToken, localReloadToken])
 
   const overview = useMemo(() => importedOverview(rows, entityFilter), [rows, entityFilter])
   const roster = useMemo(() => liveOutletRoster(directory.outlets), [directory.outlets])
@@ -218,19 +280,18 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
   // Keep section 7 on the same detailed P&L screen for every month. The
   // selected reporting month only changes these inputs, never the layout.
   const importedPLOutlets = useMemo<PLDisplayOutlet[]>(() => {
-    const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const salesIdByName = new Map(overview.outlets.map(outlet => [key(outlet.name), outlet.id]))
     const directoryById = new Map<string, OutletDirectory['outlets'][number]>(directory.outlets.map(outlet => [outlet.id, outlet]))
     const entityById = new Map([...rows, ...purchases].map(row => [row.outlet_id, row.entity]))
+    // Same per-platform net sales as section 4 (overview.byOutlet). A null
+    // platform is unknown coverage, so it is omitted rather than shown as zero.
     const platformTotals = new Map<string, Record<string, number>>()
-
-    for (const row of rows) {
-      const outletId = row.outlet_id ?? salesIdByName.get(key(row.outlet_name))
-      if (!outletId) continue
-      const platform = sourceName(row.source)
-      const current = platformTotals.get(outletId) ?? {}
-      current[platform] = (current[platform] ?? 0) + Number(row.net_sales ?? 0)
-      platformTotals.set(outletId, current)
+    for (const outlet of overview.byOutlet) {
+      const split: Record<string, number> = {}
+      for (const source of ['pos', 'grab', 'foodpanda', 'shopee', 'apps'] as const) {
+        const net = outlet[source].net
+        if (net !== null) split[sourceName(source)] = net
+      }
+      platformTotals.set(outlet.id, split)
     }
 
     return profitability
@@ -252,7 +313,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
         platforms: platformTotals.get(outlet.id) ?? {},
       }
       })
-  }, [directory.outlets, overview.outlets, profitability, rows, purchases])
+  }, [directory.outlets, overview.byOutlet, profitability, rows, purchases])
   // Section 3 reads what actually landed: rows per outlet and source, plus the
   // import statuses, so a failed file is a state rather than an absence.
   const coverage = useMemo(() => importedCoverage({
@@ -281,6 +342,7 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
   // Import analysis prepares missing P&L master records automatically.
   if (status === 'empty') return <section className="space-y-4">
     <MonthlyState icon={<CheckCircle className="h-5 w-5" />} title="This month has no imported sales yet" message="Use Import Sales to add POS, Grab, FoodPanda, Shopee, or Apps reports." />
+    {section === 'fees' && <FeesSection model={fees} channelFilter={channelFilter} grabAugustSheetScope={reportingMonth === '2026-08' ? entityFilter : undefined} />}
   </section>
 
   return <section className="space-y-4">
@@ -292,12 +354,12 @@ export const ImportedSalesSection: React.FC<ImportedSalesSectionProps> = ({ repo
       <p className="mt-2">Operating outlets: {roster.length}. POS coverage: {overview.counts.myUsPizza} MY US Pizza + {overview.counts.sabah} Sabah = {overview.counts.all} outlets with POS data. Platform-only outlets remain visible; missing data is —.</p>
     </div>
     {section === 'overview' ? <OverviewPage entityFilter={entityFilter} channelFilter={channelFilter} onEntityFilterChange={onEntityFilterChange} imported={overviewWithPurchases} period={period} />
-      : section === 'salesByOutlet' ? <SalesByOutletPage entityFilter={entityFilter} importedRows={rows} period={period} />
-      : section === 'coverage' ? <ImportedCoveragePage coverage={coverage} imports={imports} period={period} />
+      : section === 'salesByOutlet' ? <SalesByOutletPage entityFilter={entityFilter} outletOverviews={overview.byOutlet} period={period} />
+      : section === 'coverage' ? <ImportedCoveragePage coverage={coverage} imports={imports} period={period} onDeleteMonthSheets={deleteMonthSheets} />
       : section === 'purchasesByOutlet' ? <PurchasesByOutletPage entityFilter={entityFilter} importedPurchases={purchases} period={period} />
       : section === 'purchasesToNetSales' ? <PurchasesToNetSalesPage entityFilter={entityFilter} importedRows={profitability} period={period} />
       : section === 'plByOutlet' ? <PLByOutletPage entityFilter={entityFilter} outletsOverride={importedPLOutlets} period={period} />
-      : <FeesSection model={fees} channelFilter={channelFilter} />}
+      : <FeesSection model={fees} channelFilter={channelFilter} grabAugustSheetScope={reportingMonth === '2026-08' ? entityFilter : undefined} />}
     {section === 'salesByOutlet' && <TableCard
       title={`Operating outlets · ${scopedRoster.length} · ${period}`}
       subtitle="Each source is shown separately. Platform amounts overlap POS and are not added together. — means no known value; not zero."

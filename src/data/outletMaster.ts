@@ -19,7 +19,7 @@ export const OUTLET_MASTER: CanonicalOutlet[] = [
 // name. This is a denylist, not a "must be branded US Pizza" gate: a source name
 // we do not recognise stays visible as unmapped instead of being dropped.
 // Extend this list when another sister brand appears in a source export.
-const SISTER_BRANDS = [/manhattan\s+fish\s+market/i]
+const SISTER_BRANDS = [/manhattan\s+fish\s+market/i, /marshall'?s\s+co/i]
 export const isSisterBrand = (name: string) => SISTER_BRANDS.some(brand => brand.test(name))
 
 // Only typography is automatic. Location abbreviations require an explicit alias.
